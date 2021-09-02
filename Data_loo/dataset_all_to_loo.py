@@ -6,12 +6,12 @@ import random
 from tqdm import tqdm
 from collections import Counter
 
-# files = ['amazon-book', 'gowalla', 'ml-1m', 'ml-10m', 'ml-20m', 'ml-25m', 'ml-100k', 'pinterest', 'yelp2018']
-files = ['ml-100k']
+files = ['amazon-book', 'gowalla', 'ml-1m', 'ml-10m', 'ml-20m', 'ml-25m', 'ml-100k', 'pinterest', 'yelp2018']
+# files = ['ml-100k']
 for file in files:
     print("=============Create Dataset================")
     # file = 'ml-100k'
-    data = file + '/data.txt'
+    data = '../Data_all/' + file + '/data.txt'
     rating = file + '/ratings.txt'
     train = file + '/train.txt'
     test = file + '/test.txt'
@@ -37,7 +37,8 @@ for file in files:
             if len(line) > 1 and line[1] != ' ':
                 items = line[1:]
             else:
-                print(line)
+                items = []
+
             item_num = max(item_num, max(items))
             user_num = max(user_num, u_id)
             interaction_num += len(items)
@@ -47,7 +48,7 @@ for file in files:
             exist_items += items
             exist_users.append(u_id)
     user_num, item_num = user_num + 1, item_num + 1
-    print(Counter(exist_items))
+    # print(Counter(exist_items))
     print("user_num：" + str(user_num) + " item_num：" + str(item_num) + " interaction_num：" + str(interaction_num))
     print("exsit_user_num：" + str(len(list(set(exist_users)))) + " exsit_item_num：" + str(len(list(set(exist_items)))))
     print("=============Negative Sample===============")

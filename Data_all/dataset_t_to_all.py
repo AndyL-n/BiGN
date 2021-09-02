@@ -3,7 +3,7 @@ author: L
 date: 2021/8/27 16:05
 """
 
-files = ['amazon-book', 'gowalla', 'ml-1m', 'ml-10m', 'ml-20m', 'ml-25m', 'ml-100k', 'yelp2018']
+files = ['amazon-book', 'gowalla', 'ml-1m', 'ml-10m', 'ml-20m', 'ml-25m', 'ml-100k', 'pinterest', 'yelp2018']
 for file in files:
     # file = 'ml-100k'
     train_file = file + '/train.txt'
@@ -11,6 +11,7 @@ for file in files:
     data = file + '/data.txt'
     user_num, item_num = 0, 0
     n_train, n_test = 0, 0
+    n_count = 0
     data_dict, test_dict = dict(), dict()
     exist_items = []
     with open(train_file) as f:
@@ -20,9 +21,11 @@ for file in files:
                 u_id = int(line[0])
                 if len(line) > 1 and line[1] != '':
                     items = [int(i) for i in line[1:]]
-                # else:
-                #     print(line)
-                item_num = max(item_num, max(items))
+                else:
+                    items = []
+                items = list(set(items))
+                if items != []:
+                    item_num = max(item_num, max(items))
                 user_num = max(user_num, u_id)
                 data_dict[u_id] = items
                 n_train += len(items)
@@ -38,9 +41,14 @@ for file in files:
                     items = [int(i) for i in line[1:]]
                 # else:
                 #     print(line)
-                item_num = max(item_num, max(items))
+                else:
+                    items = []
+                items = list(set(items))
+                if items != []:
+                    item_num = max(item_num, max(items))
                 user_num = max(user_num, u_id)
-                data_dict[u_id] = items + data_dict[u_id]
+                data_dict[u_id] = list(items + data_dict[u_id])
+                n_count += len(data_dict[u_id])
                 n_test += len(items)
                 exist_items += items
         f.close()
@@ -48,7 +56,7 @@ for file in files:
     user_num += 1
     item_num += 1
 
-    print(user_num, item_num, n_train, n_test, n_train + n_test)
+    print(user_num, item_num, n_train, n_test, n_count)
 
     with open(data, 'w') as f:
         count = 0

@@ -27,7 +27,7 @@ def load_data(file, embed_dim=8, test_neg_num=100):
     print('============Load Dateset====================')
     print('loading:\t' + file)
     train_file = 'Data/' + file + '/train.txt'
-    test_file = 'Data/' + file + '/pinterest.test.txt'
+    test_file = 'Data/' + file + '/test.txt'
     user_num, item_num = 0, 0
     n_train, n_test = 0, 0
     data_dict, test_dict = dict(), dict()

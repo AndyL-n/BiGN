@@ -22,7 +22,7 @@ def sparseFeature(feat, feat_num, embed_dim=8):
     """
     return {'feat': feat, 'feat_num': feat_num, 'embed_dim': embed_dim}
 
-def load_data(file, embed_dim=32, path='Data'):
+def load_data(file, embed_dim=32, path='Data/'):
     """
     :param file: A string. dataset name.
     :param embed_dim: A scalar. latent factor.

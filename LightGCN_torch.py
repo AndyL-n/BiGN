@@ -199,10 +199,12 @@ def evaluate(model, sparse_norm_adj, loader, k, feature_columns):
     for user, pos, neg in loader:
         u_e, i_e = model.getEmbeds(sparse_norm_adj)
         user = user.long()
-        all_item = [i for i in range(i)]
+        pos = user.long()
+        all_item = [i for i in range(item_num)]
         user_embed = u_e[user]
         pos_embed = i_e[all_item]
-        print(p[os])
+        print(pos_embed.shape)
+        print(pos_embed)
         neg_embed = i_e[neg]
         user_embed = user_embed.unsqueeze(1)
         pos_embed = pos_embed.unsqueeze(1)
