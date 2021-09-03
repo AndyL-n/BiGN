@@ -13,3 +13,7 @@ import numpy as np
 # print(c)
 # print(c.shape)
 
+print([2]*10)
+a = [1,2,3,4]
+b = [3,4,5]
+print(b[1:2])
