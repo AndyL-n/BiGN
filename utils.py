@@ -1,94 +1,196 @@
-"""
-author: L
-date: 2021/9/6 9:10
-"""
-
-import numpy as np
 import torch as t
-from LightGCN_torch import LIGHT, sparse_mx_to_torch_sparse_tensor, parse_args, Test
-from load_data_all import load_data
-device_gpu = t.device("cpu")
+from torch import optim
+import numpy as np
+from parse import args
+from time import time
+from sklearn.metrics import roc_auc_score
+import os
 
-def evaluate(model, dataset, test_size, k):
-    user_num = dataset.__len__()
-    results = {'precision': np.zeros(1),
-               'recall': np.zeros(1),
-               'ndcg': np.zeros(1)}
-    users_list = []
-    rating_list = []
-    groundTrue_list = []
-    left, right = 0, test_size
-    while True:
-        batch_users, groundTrue, allPos = dataset[left: right]
-        batch_users_gpu = t.Tensor(batch_users).long()
-        rating = model.getUsersRating(batch_users_gpu)
-        exclude_index = []
-        exclude_items = []
-        for range_i, items in enumerate(allPos):
-            exclude_index.extend([range_i] * len(items))
-            exclude_items.extend(items)
-        #  无限小
-        rating[exclude_index, exclude_items] = -(1 << 10)
-        _, rating_K = t.topk(rating, k=k)
-        rating = rating.detach().numpy()
-        del rating
-        users_list.append(batch_users)
-        rating_list.append(rating_K.cpu())
-        groundTrue_list.append(groundTrue)
-        X = zip(rating_list, groundTrue_list)
-        pre_results = []
-        for x in X:
-            pre_results.append(test_one_batch(x, k))
-        for result in pre_results:
-            results['recall'] += result['recall']
-            results['precision'] += result['precision']
-            results['ndcg'] += result['ndcg']
-
-        break
-
-        right += test_size
-        left += test_size
-        if (right > user_num):
-            break
-    print(users_list[0])
-    print(len(users_list))
-    results['recall'] /= float(user_num)
-    results['precision'] /= float(user_num)
-    results['ndcg'] /= float(user_num)
+try:
+    from cppimport import imp_from_filepath
+    from os.path import join, dirname
+    path = join(dirname(__file__), "sampling.cpp")
+    sampling = imp_from_filepath(path)
+    sampling.seed(args.seed)
+    sample_ext = True
+except:
+    args.cprint("Cpp extension not loaded")
+    sample_ext = False
 
 
-    return results['recall'], results['ndcg']
+class BPRLoss:
+    def __init__(self, recmodel, config):
+        self.model = recmodel
+        self.weight_decay = config['decay']
+        self.lr = config['lr']
+        self.opt = optim.Adam(recmodel.parameters(), lr=self.lr)
 
-def getLabel(test_data, pred_data):
-    r = []
-    for i in range(len(test_data)):
-        groundTrue = test_data[i]
-        print(groundTrue)
-        predictTopK = pred_data[i]
-        print(predictTopK)
-        pred = list(map(lambda x: x in groundTrue, predictTopK))
-        print(pred)
-        pred = np.array(pred).astype("float")
-        r.append(pred)
-    print(r[0])
-    return np.array(r).astype('float')
+    def stageOne(self, users, pos, neg):
+        loss, reg_loss = self.model.bpr_loss(users, pos, neg)
+        reg_loss = reg_loss*self.weight_decay
+        loss = loss + reg_loss
 
-def test_one_batch(X, k):
-    sorted_items = X[0].numpy()
-    groundTrue = X[1]
-    print()
-    print(len(groundTrue))
-    r = getLabel(groundTrue, sorted_items)
-    pre, recall, ndcg = [], [], []
-    ret = RecallPrecision_ATk(groundTrue, r, k)
+        self.opt.zero_grad()
+        loss.backward()
+        self.opt.step()
 
-    pre.append(ret['precision'])
-    recall.append(ret['recall'])
-    ndcg.append(NDCGatK_r(groundTrue,r,k))
-    return {'recall':np.array(recall),
-            'precision':np.array(pre),
-            'ndcg':np.array(ndcg)}
+        return loss.cpu().item()
 
+def UniformSample_original(dataset, neg_ratio = 1):
+    allPos = dataset.allPos
+    start = time()
+    if sample_ext:
+        S = sampling.sample_negative(dataset.n_users, dataset.m_items,
+                                     dataset.trainDataSize, allPos, neg_ratio)
+    else:
+        S = UniformSample_original_python(dataset)
+    return S
+
+def UniformSample_original_python(dataset):
+    """
+    the original impliment of BPR Sampling in LightGCN
+    :return:
+        np.array
+    """
+    total_start = time()
+    user_num = dataset.trainDataSize
+    users = np.random.randint(0, dataset.n_users, user_num)
+    allPos = dataset.allPos
+    S = []
+    sample_time1 = 0.
+    sample_time2 = 0.
+    for i, user in enumerate(users):
+        start = time()
+        posForUser = allPos[user]
+        if len(posForUser) == 0:
+            continue
+        sample_time2 += time() - start
+        posindex = np.random.randint(0, len(posForUser))
+        positem = posForUser[posindex]
+        while True:
+            negitem = np.random.randint(0, dataset.m_items)
+            if negitem in posForUser:
+                continue
+            else:
+                break
+        S.append([user, positem, negitem])
+        end = time()
+        sample_time1 += end - start
+    total = time() - total_start
+    return np.array(S)
+
+# ===================end samplers==========================
+# =====================utils====================================
+
+def set_seed(seed):
+    np.random.seed(seed)
+    if t.cuda.is_available():
+        t.cuda.manual_seed(seed)
+        t.cuda.manual_seed_all(seed)
+    t.manual_seed(seed)
+
+# def getFileName():
+#     if args.model_name == 'mf':
+#         file = f"mf-{args.dataset}-{args.config['latent_dim_rec']}.pth.tar"
+#     elif args.model_name == 'lgn':
+#         file = f"lgn-{args.dataset}-{args.config['lightGCN_n_layers']}-{args.config['latent_dim_rec']}.pth.tar"
+#     return os.path.join(args.FILE_PATH,file)
+
+def minibatch(*tensors, **kwargs):
+
+    batch_size = kwargs.get('batch_size', args.batch.size)
+
+    if len(tensors) == 1:
+        tensor = tensors[0]
+        for i in range(0, len(tensor), batch_size):
+            yield tensor[i:i + batch_size]
+    else:
+        for i in range(0, len(tensors[0]), batch_size):
+            yield tuple(x[i:i + batch_size] for x in tensors)
+
+def shuffle(*arrays, **kwargs):
+
+    require_indices = kwargs.get('indices', False)
+
+    if len(set(len(x) for x in arrays)) != 1:
+        raise ValueError('All inputs to shuffle must have '
+                         'the same length.')
+
+    shuffle_indices = np.arange(len(arrays[0]))
+    np.random.shuffle(shuffle_indices)
+
+    if len(arrays) == 1:
+        result = arrays[0][shuffle_indices]
+    else:
+        result = tuple(x[shuffle_indices] for x in arrays)
+
+    if require_indices:
+        return result, shuffle_indices
+    else:
+        return result
+
+class timer:
+    """
+    Time context manager for code block
+        with timer():
+            do something
+        timer.get()
+    """
+    from time import time
+    TAPE = [-1]  # global time record
+    NAMED_TAPE = {}
+
+    @staticmethod
+    def get():
+        if len(timer.TAPE) > 1:
+            return timer.TAPE.pop()
+        else:
+            return -1
+
+    @staticmethod
+    def dict(select_keys=None):
+        hint = "|"
+        if select_keys is None:
+            for key, value in timer.NAMED_TAPE.items():
+                hint = hint + f"{key}:{value:.2f}|"
+        else:
+            for key in select_keys:
+                value = timer.NAMED_TAPE[key]
+                hint = hint + f"{key}:{value:.2f}|"
+        return hint
+
+    @staticmethod
+    def zero(select_keys=None):
+        if select_keys is None:
+            for key, value in timer.NAMED_TAPE.items():
+                timer.NAMED_TAPE[key] = 0
+        else:
+            for key in select_keys:
+                timer.NAMED_TAPE[key] = 0
+
+    def __init__(self, tape=None, **kwargs):
+        if kwargs.get('name'):
+            timer.NAMED_TAPE[kwargs['name']] = timer.NAMED_TAPE[
+                kwargs['name']] if timer.NAMED_TAPE.get(kwargs['name']) else 0.
+            self.named = kwargs['name']
+            if kwargs.get("group"):
+                #TODO: add group function
+                pass
+        else:
+            self.named = False
+            self.tape = tape or timer.TAPE
+
+    def __enter__(self):
+        self.start = timer.time()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.named:
+            timer.NAMED_TAPE[self.named] += timer.time() - self.start
+        else:
+            self.tape.append(timer.time() - self.start)
+# ====================Metrics==============================
+# =========================================================
 def RecallPrecision_ATk(test_data, r, k):
     """
     test_data should be a list? cause users may have different amount of pos items. shape (test_batch, k)
@@ -96,12 +198,21 @@ def RecallPrecision_ATk(test_data, r, k):
     k : top-k
     """
     right_pred = r[:, :k].sum(1)
-    print(right_pred)
     precis_n = k
     recall_n = np.array([len(test_data[i]) for i in range(len(test_data))])
     recall = np.sum(right_pred/recall_n)
     precis = np.sum(right_pred)/precis_n
     return {'recall': recall, 'precision': precis}
+
+def MRRatK_r(r, k):
+    """
+    Mean Reciprocal Rank
+    """
+    pred_data = r[:, :k]
+    scores = np.log2(1./np.arange(1, k+1))
+    pred_data = pred_data/scores
+    pred_data = pred_data.sum(1)
+    return np.sum(pred_data)
 
 def NDCGatK_r(test_data,r,k):
     """
@@ -124,17 +235,25 @@ def NDCGatK_r(test_data,r,k):
     ndcg[np.isnan(ndcg)] = 0.
     return np.sum(ndcg)
 
-if __name__ == '__main__':
-    np.random.seed(29)
-    t.manual_seed(29)
-    t.cuda.manual_seed(29)
-    args = parse_args()
-    args.dataset = 'ml-100k'
-    args.test_size = 64
-    print(args)
-    feature_columns, train, val, test, adj = load_data(args.dataset, args.embed_size)
-    sparse_norm_adj = sparse_mx_to_torch_sparse_tensor(adj)
-    model = LIGHT(feature_columns, args, sparse_norm_adj, device_gpu).to(device_gpu)
-    test_dataset = Test(test)
-    HR, NDCG = evaluate(model, test_dataset, args.test_size, args.top_k)
-    print(HR,NDCG)
+def AUC(all_item_scores, dataset, test_data):
+    """
+        design for a single user
+    """
+    r_all = np.zeros((dataset.m_items, ))
+    r_all[test_data] = 1
+    r = r_all[all_item_scores >= 0]
+    test_item_scores = all_item_scores[all_item_scores >= 0]
+    return roc_auc_score(r, test_item_scores)
+
+def getLabel(test_data, pred_data):
+    r = []
+    for i in range(len(test_data)):
+        groundTrue = test_data[i]
+        predictTopK = pred_data[i]
+        pred = list(map(lambda x: x in groundTrue, predictTopK))
+        pred = np.array(pred).astype("float")
+        r.append(pred)
+    return np.array(r).astype('float')
+
+# ====================end Metrics=============================
+# =========================================================

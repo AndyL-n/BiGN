@@ -146,7 +146,7 @@ class LIGHT(nn.Module):
 
         loss = t.mean(t.nn.functional.softplus(neg_scores - pos_scores))
 
-        reg_loss = reg_loss*self.weight_decay
+        reg_loss = reg_loss*self.decay
 
         loss = loss + reg_loss
 
@@ -282,7 +282,7 @@ def getLabel(test_data, pred_data):
 def test_one_batch(X, k):
     sorted_items = X[0].numpy()
     groundTrue = X[1]
-    print(groundTrue)
+    # print(groundTrue)
     r = getLabel(groundTrue, sorted_items)
     pre, recall, ndcg = [], [], []
     ret = RecallPrecision_ATk(groundTrue, r, k)
@@ -329,9 +329,9 @@ def NDCGatK_r(test_data,r,k):
     return np.sum(ndcg)
 
 if __name__ == '__main__':
-    np.random.seed(29)
-    t.manual_seed(29)
-    t.cuda.manual_seed(29)
+    np.random.seed(2020)
+    t.manual_seed(2020)
+    t.cuda.manual_seed(2020)
     args = parse_args()
     print(args)
     feature_columns, train, val, test, adj = load_data(args.dataset, args.embed_size)

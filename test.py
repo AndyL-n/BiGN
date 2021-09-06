@@ -18,4 +18,9 @@ a = [1,2,3,4]
 b = [3,4,5]
 print(b[1:2])
 
-print(eval('[8]'))
+print(len(eval('[8,16,32]')))
+
+def cprint(words : str):
+    print(f"\033[0;30;43m{words}\033[0m")
+
+cprint('aaa')
