@@ -18,16 +18,16 @@ device_gpu = t.device("cpu")
 def parse_args():
     parser = argparse.ArgumentParser(description="Run NGCF.")
 
-    parser.add_argument('--dataset', type=str, default='ml-1m')
+    parser.add_argument('--dataset', type=str, default='gowalla')
     parser.add_argument('--cv', type=int, default=1)
     parser.add_argument('--save', type=int, default=0)
-    parser.add_argument('--top_k', type=int, default=10)
+    parser.add_argument('--top_k', type=int, default=20)
     # parser.add_argument('--act', type=str, default="leakyrelu")
 
     parser.add_argument('--epoch', type=int, default=400,
                         help='Number of epoch.')
 
-    parser.add_argument('--embed_size', type=int, default=32,
+    parser.add_argument('--embed_size', type=int, default=64,
                         help='Embedding size.')
     parser.add_argument('--layer_size', nargs='?', default='[8]',
                         help='Output sizes of every layer')
@@ -37,7 +37,7 @@ def parse_args():
     parser.add_argument('--test_size', type=int, default=1024,
                         help='Batch size.')
 
-    parser.add_argument('--reg', type=float, default=0.001,
+    parser.add_argument('--reg', type=float, default=1e-4,
                         help='Regularizations.')
 
     parser.add_argument('--lr', type=float, default=0.001,
@@ -51,7 +51,6 @@ class LIGHT(nn.Module):
         self.n_user = self.user_fea_col['feat_num']
         self.n_item = self.item_fea_col['feat_num']
         self.device = device
-        self.batch_size = args.batch_size
         self.adj = sparse_norm_adj
         # self.node_dropout = args.node_dropout[0]
         # self.mess_dropout = args.mess_dropout
@@ -147,7 +146,11 @@ class LIGHT(nn.Module):
 
         loss = t.mean(t.nn.functional.softplus(neg_scores - pos_scores))
 
-        return loss, reg_loss
+        reg_loss = reg_loss*self.weight_decay
+
+        loss = loss + reg_loss
+
+        return loss
 
     def getUsersRating(self, users):
         all_users, all_items = self.computer()
@@ -353,13 +356,13 @@ if __name__ == '__main__':
         t1 = time()
         for user, pos, neg in train_loader:
             # user_embed, pos_embed, neg_embed = model(sparse_norm_adj, user.long(), pos.long(), neg.long(), drop_flag=True)
-            loss, reg_loss = model.create_bpr_loss(user, pos, neg)
+            loss = model.create_bpr_loss(user, pos, neg)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
             epoch_loss += loss.item()
         for user, pos, neg in val_loader:
-            loss, reg_loss = model.create_bpr_loss(user, pos, neg)
+            loss = model.create_bpr_loss(user, pos, neg)
             val_loss += loss.item()
         t2 = time()
         print("epoch = %d, loss = %.4f, val_loss = %.4f"%(epoch+1, epoch_loss, val_loss))

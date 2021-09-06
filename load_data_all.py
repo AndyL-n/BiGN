@@ -187,4 +187,4 @@ def load_data(file, embed_dim = 8, test_neg_num=100):
     print('============Load Dateset Success===========')
     return feat_col, train, val, test, norm_adj_mat
 
-# load_data('gowalla')
+# load_data('yelp2018')
