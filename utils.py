@@ -6,6 +6,13 @@ from time import time
 from sklearn.metrics import roc_auc_score
 import os
 
+from cppimport import imp_from_filepath
+from os.path import join, dirname
+path = join(dirname(__file__), "sampling.cpp")
+sampling = imp_from_filepath(path)
+sampling.seed(args.seed)
+sample_ext = True
+
 try:
     from cppimport import imp_from_filepath
     from os.path import join, dirname
@@ -14,16 +21,16 @@ try:
     sampling.seed(args.seed)
     sample_ext = True
 except:
-    args.cprint("Cpp extension not loaded")
+    print("Cpp extension not loaded")
     sample_ext = False
 
 
 class BPRLoss:
-    def __init__(self, recmodel, config):
-        self.model = recmodel
-        self.weight_decay = config['decay']
-        self.lr = config['lr']
-        self.opt = optim.Adam(recmodel.parameters(), lr=self.lr)
+    def __init__(self, model, args):
+        self.model = model
+        self.weight_decay = args.decay
+        self.lr = args.lr
+        self.opt = optim.Adam(model.parameters(), lr=self.lr)
 
     def stageOne(self, users, pos, neg):
         loss, reg_loss = self.model.bpr_loss(users, pos, neg)
@@ -98,7 +105,7 @@ def set_seed(seed):
 
 def minibatch(*tensors, **kwargs):
 
-    batch_size = kwargs.get('batch_size', args.batch.size)
+    batch_size = kwargs.get('batch_size', args.train_batch)
 
     if len(tensors) == 1:
         tensor = tensors[0]
@@ -170,8 +177,8 @@ class timer:
 
     def __init__(self, tape=None, **kwargs):
         if kwargs.get('name'):
-            timer.NAMED_TAPE[kwargs['name']] = timer.NAMED_TAPE[
-                kwargs['name']] if timer.NAMED_TAPE.get(kwargs['name']) else 0.
+            timer.NAMED_TAPE[kwargs['name']] = \
+                timer.NAMED_TAPE[kwargs['name']] if timer.NAMED_TAPE.get(kwargs['name']) else 0.
             self.named = kwargs['name']
             if kwargs.get("group"):
                 #TODO: add group function

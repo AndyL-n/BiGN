@@ -6,6 +6,8 @@ import argparse
 import torch as t
 def parse_args():
     parser = argparse.ArgumentParser(description="Run BiGN.")
+    parser.add_argument('--model_name', type=str, default='lgn',
+                        help="The name of model.")
     parser.add_argument('--train_batch', type=int,default=2048,
                         help="The batch size for bpr loss training procedure.")
     parser.add_argument('--test_batch', type=int, default=1024,
@@ -20,8 +22,10 @@ def parse_args():
                         help="Regularizations.")
     parser.add_argument('--dropout', type=int,default=0,
                         help="Using the dropout or not.")
-    parser.add_argument('--keepprob', type=float,default=0.6,
+    parser.add_argument('--keep_prob', type=float,default=0.6,
                         help="The batch size for bpr loss training procedure.")
+    parser.add_argument('--split', type=bool, default=False,
+                        help="Using the split or not.")
     parser.add_argument('--a_fold', type=int,default=100,
                         help="the fold num used to split large adj matrix, like gowalla")
     parser.add_argument('--dataset', type=str,default='gowalla',
@@ -39,7 +43,7 @@ def parse_args():
                         help="The number of epochs.")
     parser.add_argument('--multicore', type=int, default=0,
                         help='whether we use multiprocessing or not in test')
-    parser.add_argument('--pretrain', type=int, default=0,
+    parser.add_argument('--pretrain', type=bool, default=False,
                         help='whether we use pretrained weight or not')
     parser.add_argument('--seed', type=int, default=2020,
                         help='random seed')
@@ -56,4 +60,7 @@ def parse_args():
 
 
 args = parse_args()
-print(args.device)
+# print(args.device)f
+
+def cprint(words : str):
+    print(f"\033[0;30;43m{words}\033[0m")
