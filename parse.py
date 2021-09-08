@@ -24,7 +24,7 @@ def parse_args():
                         help="Using the dropout or not.")
     parser.add_argument('--keep_prob', type=float,default=0.6,
                         help="The batch size for bpr loss training procedure.")
-    parser.add_argument('--split', type=bool, default=False,
+    parser.add_argument('--split', type=bool, default=True,
                         help="Using the split or not.")
     parser.add_argument('--a_fold', type=int,default=100,
                         help="the fold num used to split large adj matrix, like gowalla")

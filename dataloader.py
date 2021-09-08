@@ -115,8 +115,7 @@ class Loader(BasicDataset):
         self.testItem = np.array(testItem)
         
         self.Graph = None
-        self.user_sim_mat = None
-        self.item_sim_mat = None
+        self.similarity = None
         print(f"{self.n_user} users")
         print(f"{self.m_item} items")
         print(f"{self.trainDataSize} interactions for training")
@@ -164,7 +163,7 @@ class Loader(BasicDataset):
                 end = self.n_users + self.m_items
             else:
                 end = (i_fold + 1) * fold_len
-            A_fold.append(self._convert_sp_mat_to_sp_tensor(A[start:end]).coalesce().to(world.device))
+            A_fold.append(self._convert_sp_mat_to_sp_tensor(A[start:end]).coalesce().to(args.device))
         return A_fold
 
     def _convert_sp_mat_to_sp_tensor(self, X):
@@ -221,52 +220,39 @@ class Loader(BasicDataset):
     #     output_csr_matrix.data /= rows_sums_sqrt[input_coo_matrix.row]
     #     return sq(output_csr_matrix)
 
-    def getSimGraph(self):
+    def getSimilarity(self):
         print("loading similarity matrix")
-        if self.user_sim_mat is None:
+        if self.similarity is None:
             try:
-                user_sim_mat = sp.load_npz(self.path + '/user_sim_mat.npz')
-                print("successfully loaded user_sim_mat...")
+                similarity = sp.load_npz(self.path + '/similarity_mat.npz')
+                print("successfully loaded similarity...")
+                print(len(similarity.data))
             except :
-                print("generating user similarity matrix")
+                print("generating similarity matrix")
                 s = time()
-                user_sim_mat = sp.dok_matrix((self.n_users, self.n_users), dtype=np.float32)
-                user_sim_mat = user_sim_mat.tolil()
-                dist_out = 1 - pairwise_distances(self.UserItemNet, metric="cosine")
-                user_sim_mat[:] = dist_out
-                user_sim_mat = user_sim_mat.tocsr()
+                similarity = sp.dok_matrix((self.n_users + self.m_items, self.n_users + self.m_items), dtype=np.float32)
+                similarity = similarity.tolil()
+                R = self.UserItemNet.tolil()
+                print("generating user similarity")
+                dist_out = 1 - pairwise_distances(R, metric="cosine")
+                similarity[:self.n_users, :self.n_users] = dist_out
+                print("generating item similarity")
+                dist_out = 1 - pairwise_distances(R.T, metric="cosine")
+                similarity[self.n_users:, self.n_users:] = dist_out
+                similarity = similarity.tocsr()
                 end = time()
-                print(f"costing {end-s}s, saved user_sim_mat...")
-                sp.save_npz(self.path + '/user_sim_mat.npz', user_sim_mat)
+                print(f"costing {end-s}s, saved similarity_mat...")
+                sp.save_npz(self.path + '/similarity_mat.npz', similarity)
 
-            if self.user_sim_mat is None:
-                try:
-                    item_sim_mat = sp.load_npz(self.path + '/item_sim_mat.npz')
-                    print("successfully loaded user_sim_mat...")
-                except :
-                    print("generating item similarity matrix")
-                    s = time()
-                    item_sim_mat = sp.dok_matrix((self.m_items, self.m_items), dtype=np.float32)
-                    item_sim_mat = item_sim_mat.tolil()
-                    dist_out = 1 - pairwise_distances(self.UserItemNet.T, metric="cosine")
-                    item_sim_mat[:] = dist_out
-                    print(dist_out.shape)
-                    item_sim_mat = item_sim_mat.tocsr()
-                    end = time()
-                    print(f"costing {end - s}s, saved item_sim_mat...")
-                    sp.save_npz(self.path + '/item_sim_mat.npz', item_sim_mat)
 
             if self.split == True:
-                self.user_sim_mat = self._split_A_hat(user_sim_mat)
-                self.item_sim_mat = self._split_A_hat(item_sim_mat)
+                self.similarity = self._split_A_hat(similarity)
                 print("done split matrix")
             else:
-                self.user_sim_mat = self._convert_sp_mat_to_sp_tensor(user_sim_mat)
-                self.user_sim_mat = self.user_sim_mat.coalesce().to(args.device)
-                self.item_sim_mat = self._convert_sp_mat_to_sp_tensor(item_sim_mat)
-                self.item_sim_mat = self.item_sim_mat.coalesce().to(args.device)
+                self.similarity = self._convert_sp_mat_to_sp_tensor(similarity)
+                self.similarity = self.similarity.coalesce().to(args.device)
                 print("don't split the matrix")
-        return self.user_sim_mat, self.item_sim_mat
+        return self.similarity
 
     def __build_test(self):
         """
@@ -305,36 +291,3 @@ class Loader(BasicDataset):
         for user in users:
             negItems.append(self.allNeg[user])
         return negItems
-
-dataset = Loader(path="Data/"+args.dataset)
-dataset.getSimGraph()
-
-users_emb = self.embedding_user.weight
-items_emb = self.embedding_item.weight
-all_emb = t.cat([users_emb, items_emb])
-#   t.split(all_emb , [self.num_users, self.num_items])
-embs = [all_emb]
-if self.args.dropout:
-    if self.training:
-        print("droping")
-        g_droped = self.__dropout(self.keep_prob)
-    else:
-        g_droped = self.Graph
-else:
-    g_droped = self.Graph
-
-for layer in range(self.n_layers):
-    if self.A_split:
-        temp_emb = []
-        for f in range(len(g_droped)):
-            temp_emb.append(t.sparse.mm(g_droped[f], all_emb))
-        side_emb = t.cat(temp_emb, dim=0)
-        all_emb = side_emb
-    else:
-        all_emb = t.sparse.mm(g_droped, all_emb)
-    embs.append(all_emb)
-embs = t.stack(embs, dim=1)
-# print(embs.size())
-light_out = t.mean(embs, dim=1)
-users, items = t.split(light_out, [self.num_users, self.num_items])
-return users, items

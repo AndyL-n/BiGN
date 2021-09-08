@@ -58,7 +58,7 @@ class LightGCN(BasicModel):
             cprint('use NORMAL distribution initilizer')
         self.f = nn.Sigmoid()
         self.Graph = self.dataset.getSparseGraph()
-        print(f"LightGCN is already to go(dropout:{self.args.dropout})")
+        print(f"{self.args.model_name} is already to go(dropout:{self.args.dropout})")
 
         # print("save_txt")
 
@@ -186,9 +186,9 @@ class BiGN(BasicModel):
             nn.init.normal_(self.embedding_item.weight, std=0.1)
             cprint('use NORMAL distribution initilizer')
         self.f = nn.Sigmoid()
-        self.user_sim_mat, self.item_sim_mat = self.dataset.getSimGraph()
-        print(self.Graph.shape)
-        print(f"BiGN is already to go(dropout:{self.args.dropout})")
+
+        self.Graph = self.dataset.getSimilarity()
+        print(f"{self.args.model_name} is already to go(dropout:{self.args.dropout})")
 
         # print("save_txt")
 
@@ -205,59 +205,46 @@ class BiGN(BasicModel):
 
     def __dropout(self, keep_prob):
         if self.A_split:
-            user_sim_mat = []
-            for u in self.user_sim_mat:
-                user_sim_mat.append(self.__dropout_x(u, keep_prob))
-            item_sim_mat = []
-            for i in self.item_sim_mat:
-                item_sim_mat.append(self.__dropout_x(i, keep_prob))
+            graph = []
+            for g in self.Graph:
+                graph.append(self.__dropout_x(g, keep_prob))
         else:
-            user_sim_mat = self.__dropout_x(self.user_sim_mat, keep_prob)
-            item_sim_mat = self.__dropout_x(self.item_sim_mat, keep_prob)
-        return user_sim_mat, item_sim_mat
+            graph = self.__dropout_x(self.Graph, keep_prob)
+        return graph
 
     def computer(self):
         """
         propagate methods for lightGCN
         """
-        user_emb = self.embedding_user.weight
-        item_emb = self.embedding_item.weight
-        # all_emb = t.cat([users_emb, items_emb])
+        users_emb = self.embedding_user.weight
+        items_emb = self.embedding_item.weight
+        all_emb = t.cat([users_emb, items_emb])
         #   t.split(all_emb , [self.num_users, self.num_items])
-        users_emb = [user_emb]
-        items_emb = [item_emb]
+        embs = [all_emb]
         if self.args.dropout:
             if self.training:
                 print("droping")
-                user_sim_mat, item_sim_mat = self.__dropout(self.keep_prob)
+                g_droped = self.__dropout(self.keep_prob)
             else:
-                user_sim_mat, item_sim_mat = self.user_sim_mat, self.item_sim_mat
+                g_droped = self.Graph
         else:
-            user_sim_mat, item_sim_mat = self.user_sim_mat, self.item_sim_mat
+            g_droped = self.Graph
 
         for layer in range(self.n_layers):
             if self.A_split:
-                user_temp_emb = []
-                for f in range(len(user_sim_mat)):
-                    user_temp_emb.append(t.sparse.mm(user_sim_mat[f], user_emb))
+                temp_emb = []
+                for f in range(len(g_droped)):
+                    temp_emb.append(t.sparse.mm(g_droped[f], all_emb))
                 side_emb = t.cat(temp_emb, dim=0)
-                user_emb = side_emb
-                item_temp_emb = []
-                for f in range(len(item_sim_mat)):
-                    item_temp_emb.append(t.sparse.mm(item_sim_mat[f], item_emb))
-                side_emb = t.cat(temp_emb, dim=0)
-                item_emb = side_emb
+                all_emb = side_emb
             else:
-                user_emb = t.sparse.mm(user_sim_mat, user_emb)
-                item_emb = t.sparse.mm(item_sim_mat, item_emb)
-            users_emb.append(user_emb)
-            items_emb.append(items_emb)
-        users_emb = t.stack(users_emb, dim=1)
-        items_emb = t.stack(items_emb, dim=1)
+                all_emb = t.sparse.mm(g_droped, all_emb)
+            embs.append(all_emb)
+        embs = t.stack(embs, dim=1)
         # print(embs.size())
-        items_emb = t.mean(users_emb, dim=1)
-        items_emb = t.mean(items_emb, dim=1)
-        return items_emb, items_emb
+        light_out = t.mean(embs, dim=1)
+        users, items = t.split(light_out, [self.num_users, self.num_items])
+        return users, items
 
     def getUsersRating(self, users):
         all_users, all_items = self.computer()
