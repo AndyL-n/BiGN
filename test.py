@@ -24,8 +24,16 @@ import numpy as np
 #     print(f"\033[0;30;43m{words}\033[0m")
 #
 # cprint('aaa')
-result = {'precision': np.array([0.00018755]), 'recall': np.array([0.00053749]), 'ndcg': np.array([0.00040836])}
-a,b,c = result
-precision, recall, ndcg = [result[x] for x in result]
-# print(lambda x: result[x] in result)
-print(precision, recall, ndcg)
+# result = {'precision': np.array([0.00018755]), 'recall': np.array([0.00053749]), 'ndcg': np.array([0.00040836])}
+# a,b,c = result
+# precision, recall, ndcg = [result[x] for x in result]
+# # print(lambda x: result[x] in result)
+# print(precision, recall, ndcg)
+import torch as t
+a = t.Tensor([[1,2],[3,4]])
+print(a)
+print(a.T)
+O = t.zeros([2, 2])
+print(O)
+a = t.cat([t.cat([a, O], dim=1), t.cat([O, a.T], dim=1)], dim=0)
+print(a)
