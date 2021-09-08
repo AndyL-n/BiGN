@@ -6,13 +6,6 @@ from time import time
 from sklearn.metrics import roc_auc_score
 import os
 
-from cppimport import imp_from_filepath
-from os.path import join, dirname
-path = join(dirname(__file__), "sampling.cpp")
-sampling = imp_from_filepath(path)
-sampling.seed(args.seed)
-sample_ext = True
-
 try:
     from cppimport import imp_from_filepath
     from os.path import join, dirname
@@ -50,41 +43,38 @@ def UniformSample_original(dataset, neg_ratio = 1):
         S = sampling.sample_negative(dataset.n_users, dataset.m_items,
                                      dataset.trainDataSize, allPos, neg_ratio)
     else:
-        S = UniformSample_original_python(dataset)
-    return S
-
-def UniformSample_original_python(dataset):
-    """
-    the original impliment of BPR Sampling in LightGCN
-    :return:
-        np.array
-    """
-    total_start = time()
-    user_num = dataset.trainDataSize
-    users = np.random.randint(0, dataset.n_users, user_num)
-    allPos = dataset.allPos
-    S = []
-    sample_time1 = 0.
-    sample_time2 = 0.
-    for i, user in enumerate(users):
-        start = time()
-        posForUser = allPos[user]
-        if len(posForUser) == 0:
-            continue
-        sample_time2 += time() - start
-        posindex = np.random.randint(0, len(posForUser))
-        positem = posForUser[posindex]
-        while True:
-            negitem = np.random.randint(0, dataset.m_items)
-            if negitem in posForUser:
+        """
+        the original impliment of BPR Sampling in LightGCN
+        :return:
+            np.array
+        """
+        total_start = time()
+        user_num = dataset.trainDataSize
+        users = np.random.randint(0, dataset.n_users, user_num)
+        allPos = dataset.allPos
+        S = []
+        sample_time1 = 0.
+        sample_time2 = 0.
+        for i, user in enumerate(users):
+            start = time()
+            posForUser = allPos[user]
+            if len(posForUser) == 0:
                 continue
-            else:
-                break
-        S.append([user, positem, negitem])
-        end = time()
-        sample_time1 += end - start
-    total = time() - total_start
-    return np.array(S)
+            sample_time2 += time() - start
+            posindex = np.random.randint(0, len(posForUser))
+            positem = posForUser[posindex]
+            while True:
+                negitem = np.random.randint(0, dataset.m_items)
+                if negitem in posForUser:
+                    continue
+                else:
+                    break
+            S.append([user, positem, negitem])
+            end = time()
+            sample_time1 += end - start
+        total = time() - total_start
+        S = np.array(S)
+    return S
 
 # ===================end samplers==========================
 # =====================utils====================================
@@ -120,8 +110,7 @@ def shuffle(*arrays, **kwargs):
     require_indices = kwargs.get('indices', False)
 
     if len(set(len(x) for x in arrays)) != 1:
-        raise ValueError('All inputs to shuffle must have '
-                         'the same length.')
+        raise ValueError('All inputs to shuffle must have the same length.')
 
     shuffle_indices = np.arange(len(arrays[0]))
     np.random.shuffle(shuffle_indices)

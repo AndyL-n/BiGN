@@ -6,7 +6,7 @@ import argparse
 import torch as t
 def parse_args():
     parser = argparse.ArgumentParser(description="Run BiGN.")
-    parser.add_argument('--model_name', type=str, default='lgn',
+    parser.add_argument('--model_name', type=str, default='LightGCN',
                         help="The name of model.")
     parser.add_argument('--train_batch', type=int,default=2048,
                         help="The batch size for bpr loss training procedure.")
@@ -29,13 +29,13 @@ def parse_args():
     parser.add_argument('--a_fold', type=int,default=100,
                         help="the fold num used to split large adj matrix, like gowalla")
     parser.add_argument('--dataset', type=str,default='gowalla',
-                        help="available datasets: [lastfm, gowalla, yelp2018, amazon-book]")
+                        help="available datasets: [gowalla, yelp2018, amazon-book]")
     parser.add_argument('--path', type=str,default="./checkpoints",
                         help="path to save weights")
     parser.add_argument('--topks', nargs='?',default="[20]",
                         help="@k test list")
-    parser.add_argument('--tensorboard', type=int,default=1,
-                        help="enable tensorboard")
+    # parser.add_argument('--tensorboard', type=int,default=1,
+    #                     help="enable tensorboard")
     parser.add_argument('--comment', type=str,default="lgn",
                         help="Comment.")
     parser.add_argument('--load', type=int,default=0)
@@ -57,7 +57,6 @@ def parse_args():
     parser.add_argument('--device', default=device)
     # parser.add_argument('--act', type=str, default="leakyrelu")
     return parser.parse_args()
-
 
 args = parse_args()
 # print(args.device)f

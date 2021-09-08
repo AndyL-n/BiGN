@@ -3,10 +3,38 @@ author: L
 date: 2021/9/6 17:07
 """
 from register import dataset, args, MODELS
-from utils import set_seed, BPRLoss, minibatch, RecallPrecision_ATk, getLabel, NDCGatK_r
+from utils import set_seed, BPRLoss, minibatch, RecallPrecision_ATk, getLabel, NDCGatK_r, timer, UniformSample_original, shuffle
 import numpy as np
 import torch as t
+import pandas as pd
+from time import time
 
+
+def Train(dataset, recommend_model, loss_class, neg_k=1, ):
+    Recmodel = recommend_model
+    Recmodel.train()
+    bpr: BPRLoss = loss_class
+
+    with timer(name="Sample"):
+        S = UniformSample_original(dataset)
+    users = t.Tensor(S[:, 0]).long()
+    posItems = t.Tensor(S[:, 1]).long()
+    negItems = t.Tensor(S[:, 2]).long()
+
+    users = users.to(args.device)
+    posItems = posItems.to(args.device)
+    negItems = negItems.to(args.device)
+    users, posItems, negItems = shuffle(users, posItems, negItems)
+    total_batch = len(users) // args.train_batch + 1
+    aver_loss = 0.
+    for (batch_i, (batch_users, batch_pos, batch_neg)) in enumerate(
+            minibatch(users, posItems, negItems, batch_size=args.train_batch)):
+        cri = bpr.stageOne(batch_users, batch_pos, batch_neg)
+        aver_loss += cri
+    aver_loss = aver_loss / total_batch
+    time_info = timer.dict()
+    timer.zero()
+    return f"loss{aver_loss:.10f}-{time_info}" , aver_loss
 
 def test_one_batch(X):
     sorted_items = X[0].numpy()
@@ -21,7 +49,6 @@ def test_one_batch(X):
     return {'recall': np.array(recall),
             'precision': np.array(pre),
             'ndcg': np.array(ndcg)}
-
 
 def Test(dataset, Recmodel):
     u_batch_size = args.test_batch
@@ -86,7 +113,6 @@ def Test(dataset, Recmodel):
         results['precision'] /= float(len(users))
         results['ndcg'] /= float(len(users))
         # results['auc'] = np.mean(auc_record)
-        print(results)
         return results
 
 if __name__ == '__main__':
@@ -95,5 +121,26 @@ if __name__ == '__main__':
     model = MODELS[args.model_name](args, dataset)
     model = model.to(args.device)
     bpr = BPRLoss(model, args)
+    Neg_k = 1
+    results = []
+    result = Test(dataset, model)
+    precision, recall, ndcg = [result[x] for x in result]
+    print(precision, recall, ndcg)
+    results.append([0, 0, 0, 0, recall, ndcg, precision])
+    pd.DataFrame(results, columns=['Iteration', 'fit_time', 'loss', 'evaluate_time', 'recall', 'ndcg', 'precision']) \
+        .to_csv('log/{}_log_{}_dim_{}_K_{}.csv'
+                .format(args.model_name, args.dataset, args.embed_size, args.topks, ), index=False)
+    print('start training...')
     for epoch in range(args.epochs):
-        Test(dataset, model)
+        t1 = time()
+        output, loss = Train(dataset, model, bpr, neg_k=Neg_k)
+        print(loss)
+        print(f'EPOCH[{epoch + 1}/{args.epochs}] {output}')
+        t2 = time()
+        result = Test(dataset, model)
+        precision, recall, ndcg = [result[x] for x in result]
+        print(precision, recall, ndcg)
+        results.append([epoch + 1, t2-t1, loss, time()-t2, recall, ndcg, precision])
+        pd.DataFrame(results, columns=['Iteration', 'fit_time', 'loss', 'evaluate_time', 'recall', 'ndcg', 'precision'])\
+            .to_csv('log/{}_log_{}_dim_{}_K_{}.csv'
+                    .format(args.model_name, args.dataset, args.embed_size, args.topks,), index=False)

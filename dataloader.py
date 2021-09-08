@@ -62,7 +62,7 @@ class Loader(BasicDataset):
     gowalla dataset
     """
 
-    def __init__(self, path="data/gowalla"):
+    def __init__(self, path="Data/gowalla"):
         # train or test
         cprint(f'loading [{path}]')
         self.split = args.split
@@ -243,8 +243,8 @@ class Loader(BasicDataset):
             posItems.append(self.UserItemNet[user].nonzero()[1])
         return posItems
 
-    # def getUserNegItems(self, users):
-    #     negItems = []
-    #     for user in users:
-    #         negItems.append(self.allNeg[user])
-    #     return negItems
+    def getUserNegItems(self, users):
+        negItems = []
+        for user in users:
+            negItems.append(self.allNeg[user])
+        return negItems
