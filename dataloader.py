@@ -4,11 +4,13 @@ import pandas as pd
 from torch.utils.data import Dataset, DataLoader
 from scipy.sparse import csr_matrix
 import scipy.sparse as sp
+from sklearn.preprocessing import normalize
 from time import time
 from parse import cprint, args
+from sys import exit
 from sklearn.metrics import pairwise_distances
 from scipy.spatial.distance import cosine
-
+pd.set_option('display.max_rows',None)
 class BasicDataset(Dataset):
     def __init__(self):
         print("init dataset")
@@ -220,30 +222,68 @@ class Loader(BasicDataset):
     #     output_csr_matrix.data /= rows_sums_sqrt[input_coo_matrix.row]
     #     return sq(output_csr_matrix)
 
+    def softmax(self, similarity):
+        # print(similarity)
+        E = sp.eye(similarity.shape[0])
+        # print(E)
+        similarity_exp = similarity - E
+        # similarity_exp = similarity
+        similarity_exp.data = np.exp(similarity_exp.data)
+        rowsum = np.array(similarity_exp.sum(axis=1))
+        # print(rowsum)
+        d_inv = np.power(rowsum, -1).flatten()
+        d_inv[np.isinf(d_inv)] = 0.
+        d_mat = sp.diags(d_inv)
+        d_mat = d_mat.tocsr()
+        similarity_sotfmax = similarity_exp.dot(d_mat)
+        return similarity_sotfmax + E
+
     def getSimilarity(self):
         print("loading similarity matrix")
         if self.similarity is None:
-            try:
-                similarity = sp.load_npz(self.path + '/similarity_mat.npz')
-                print("successfully loaded similarity...")
-                print(len(similarity.data))
-            except :
-                print("generating similarity matrix")
-                s = time()
-                similarity = sp.dok_matrix((self.n_users + self.m_items, self.n_users + self.m_items), dtype=np.float32)
-                similarity = similarity.tolil()
-                R = self.UserItemNet.tolil()
-                print("generating user similarity")
-                dist_out = 1 - pairwise_distances(R, metric="cosine")
-                similarity[:self.n_users, :self.n_users] = dist_out
-                print("generating item similarity")
-                dist_out = 1 - pairwise_distances(R.T, metric="cosine")
-                similarity[self.n_users:, self.n_users:] = dist_out
-                similarity = similarity.tocsr()
-                end = time()
-                print(f"costing {end-s}s, saved similarity_mat...")
-                sp.save_npz(self.path + '/similarity_mat.npz', similarity)
+            # try:
+            similarity = sp.load_npz(self.path + '/similarity_mat.npz')
+            print("successfully loaded similarity...")
+            # print(len(similarity.data))
 
+            # except :
+            #     print("generating similarity matrix")
+            #     s = time()
+            #     similarity = sp.dok_matrix((self.n_users + self.m_items, self.n_users + self.m_items), dtype=np.float32)
+            #     similarity = similarity.tolil()
+            #     R = self.UserItemNet.tolil()
+            #     print("generating user similarity")
+            #     dist_out = 1 - pairwise_distances(R, metric="cosine")
+            #     similarity[:self.n_users, :self.n_users] = dist_out
+            #     print("generating item similarity")
+            #     dist_out = 1 - pairwise_distances(R.T, metric="cosine")
+            #     similarity[self.n_users:, self.n_users:] = dist_out
+            #     similarity = similarity.tocsr()
+            #     end = time()
+            #     print(f"costing {end-s}s, saved similarity_mat...")
+            #     sp.save_npz(self.path + '/similarity_mat.npz', similarity)
+
+
+            # sample
+            if args.neighbor != 0:
+                row = similarity.shape[0]
+                similarity = similarity.tolil()
+                for i in range(row):
+                    tmp = similarity.getrow(i).toarray()[0]
+                    rank_index = tmp.argsort()[::-1]
+                    rank_index = rank_index[:args.neighbor+1]
+                    for j in range(row):
+                        if j not in rank_index:
+                            tmp[j] = 0
+                    similarity[i,:] = tmp
+                    print(i)
+
+            print(len(similarity.data))
+            sp.save_npz(self.path + '/similarity_mat.npz', similarity)
+            # sotfmax
+            exit()
+            similarity = self.softmax(similarity)
+            print(len(similarity.data))
 
             if self.split == True:
                 self.similarity = self._split_A_hat(similarity)
@@ -291,3 +331,6 @@ class Loader(BasicDataset):
         for user in users:
             negItems.append(self.allNeg[user])
         return negItems
+
+dataset = Loader(path="Data/"+args.dataset)
+dataset.getSimilarity()

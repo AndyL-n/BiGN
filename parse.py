@@ -24,7 +24,7 @@ def parse_args():
                         help="Using the dropout or not.")
     parser.add_argument('--keep_prob', type=float,default=0.6,
                         help="The batch size for bpr loss training procedure.")
-    parser.add_argument('--split', type=bool, default=True,
+    parser.add_argument('--split', type=bool, default=False,
                         help="Using the split or not.")
     parser.add_argument('--a_fold', type=int,default=100,
                         help="the fold num used to split large adj matrix, like gowalla")
@@ -36,8 +36,10 @@ def parse_args():
                         help="@k test list")
     # parser.add_argument('--tensorboard', type=int,default=1,
     #                     help="enable tensorboard")
-    parser.add_argument('--comment', type=str,default="lgn",
-                        help="Comment.")
+    # parser.add_argument('--comment', type=str,default="lgn",
+    #                     help="Comment.")
+    parser.add_argument('--neighbor', type=int, default=20,
+                        help="The number of neighbor.")
     parser.add_argument('--load', type=int,default=0)
     parser.add_argument('--epochs', type=int,default=1000,
                         help="The number of epochs.")
