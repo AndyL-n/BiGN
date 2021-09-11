@@ -38,7 +38,7 @@ def parse_args():
     #                     help="enable tensorboard")
     # parser.add_argument('--comment', type=str,default="lgn",
     #                     help="Comment.")
-    parser.add_argument('--neighbor', type=int, default=20,
+    parser.add_argument('--neighbor', type=int, default=30,
                         help="The number of neighbor.")
     parser.add_argument('--load', type=int,default=0)
     parser.add_argument('--epochs', type=int,default=1000,

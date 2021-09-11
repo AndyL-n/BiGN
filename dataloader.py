@@ -280,7 +280,7 @@ class Loader(BasicDataset):
 
             similarity = similarity.tocsr()
             print(len(similarity.data))
-            sp.save_npz(self.path + '/similarity_mat_sample.npz', similarity)
+            sp.save_npz(self.path + '/similarity_mat_sample_30.npz', similarity)
             # sotfmax
             exit()
             similarity = self.softmax(similarity)
