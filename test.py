@@ -29,37 +29,47 @@ import numpy as np
 # precision, recall, ndcg = [result[x] for x in result]
 # # print(lambda x: result[x] in result)
 # print(precision, recall, ndcg)
-# import torch as t
-# a = t.Tensor([[1,2],[3,4]])
-# print(a)
+import torch as t
+a = t.Tensor([1,2,3]).unsqueeze(0)
+print(a)
+print(a.T)
+print(t.sparse.mm(t.sparse.mm(a.T,a), t.eye(3)))
 # print(a.T)
 # O = t.zeros([2, 2])
 # print(O)
 # a = t.cat([t.cat([a, O], dim=1), t.cat([O, a.T], dim=1)], dim=0)
 # print(a)
-import scipy.sparse as sp
-a = np.array([1,2,3,4])
-a = sp.diags(a)
-a = a.tocsr()
-print(a)
-b = [[11,12,13,14],[0,0,0,24],[0,0,0,34],[0,0,0,44]]
-c = sp.dok_matrix((4,4), dtype=int)
-c = c.tolil()
-c[:,:] = b
-c = c.tocsr()
-print(a[0,0])
-print("-------------------------")
-print(c[0,0])
-print("-------------------------")
-print(c.dot(a))
-print("----------c---------------")
-print(a.dot(c))
-print("----------a--------------")
-print(c*a)
-c = c*a
-print("-------------------------")
-c.sort_indices()
-for i in range(c.shape[0]):
-
-    print(c.getrow(i))
-    print("-------------------------")
+# import scipy.sparse as sp
+# a = np.array([1,2,3,4])
+# a = sp.diags(a)
+# a = a.tocsr()
+# print(a)
+# b = [[11,12,13,14],[0,0,0,24],[0,0,0,34],[0,0,0,44]]
+# c = sp.dok_matrix((4,4), dtype=int)
+# c = c.tolil()
+# c[:,:] = b
+# c = c.tocsr()
+# print(a[0,0])
+# print("-------------------------")
+# print(c[0,0])
+# print("-------------------------")
+# print(c.dot(a))
+# print("----------c---------------")
+# print(a.dot(c))
+# print("----------a--------------")
+# print(c*a)
+# c = c*a
+# print("-------------------------")
+# c.sort_indices()
+# for i in range(c.shape[0]):
+#
+#     print(c.getrow(i))
+#     print("-------------------------")
+# import numpy as np
+#
+# a = np.array([[1, 2], [3, 4]])
+# b = np.array([[1, 0], [0, 2]])
+# print(b.dot(a))
+# print(a.dot(b))
+# print(b*a)
+# print(a*b)

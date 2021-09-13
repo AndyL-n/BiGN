@@ -16,5 +16,6 @@ print('===========end===================')
 #
 MODELS = {
     'LightGCN': model.LightGCN,
-    'BiGN': model.BiGN
+    'BiGN': model.BiGN,
+    'DGCN_HN':model.DGCN_HN
 }

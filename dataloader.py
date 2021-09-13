@@ -117,7 +117,9 @@ class Loader(BasicDataset):
         self.testItem = np.array(testItem)
         
         self.Graph = None
+        self.LGraph = None
         self.similarity = None
+
         print(f"{self.n_user} users")
         print(f"{self.m_item} items")
         print(f"{self.trainDataSize} interactions for training")
@@ -215,6 +217,45 @@ class Loader(BasicDataset):
                 print("don't split the matrix")
         return self.Graph
 
+    def getSparseLGraph(self):
+        print("loading L adjacency matrix")
+        if self.LGraph is None:
+            try:
+                pre_adj_mat = sp.load_npz(self.path + '/s_pre_L_adj_mat.npz')
+                print("successfully loaded...")
+                norm_adj = pre_adj_mat
+                # print(norm_adj)
+            except:
+                print("generating L adjacency matrix")
+                s = time()
+                adj_mat = sp.dok_matrix((self.n_users + self.m_items, self.n_users + self.m_items), dtype=np.float32)
+                adj_mat = adj_mat.tolil()
+                R = self.UserItemNet.tolil()
+                adj_mat[:self.n_users, self.n_users:] = R
+                adj_mat[self.n_users:, :self.n_users] = R.T
+                adj_mat = adj_mat.todok()
+                # adj_mat = adj_mat + sp.eye(adj_mat.shape[0])
+
+                rowsum = np.array(adj_mat.sum(axis=1))
+                d_inv = np.power(rowsum, -1).flatten()
+                d_inv[np.isinf(d_inv)] = 0.
+                d_mat = sp.diags(d_inv)
+
+                norm_adj = d_mat.dot(adj_mat)
+                norm_adj = norm_adj.tocsr()
+                end = time()
+                print(f"costing {end - s}s, saved norm_mat...")
+                sp.save_npz(self.path + '/s_pre_L_adj_mat.npz', norm_adj)
+
+            if self.split == True:
+                self.LGraph = self._split_A_hat(norm_adj)
+                print("done split matrix")
+            else:
+                self.LGraph = self._convert_sp_mat_to_sp_tensor(norm_adj)
+                self.LGraph = self.LGraph.coalesce().to(args.device)
+                print("don't split the matrix")
+        return self.LGraph
+
     # def coo_cosine_similarity(input_coo_matrix):
     #     sq = lambda x: x * x.T
     #     output_csr_matrix = input_coo_matrix.tocsr()
@@ -230,19 +271,22 @@ class Loader(BasicDataset):
         # similarity_exp = similarity
         similarity_exp.data = np.exp(similarity_exp.data)
         rowsum = np.array(similarity_exp.sum(axis=1))
-        # print(rowsum)
+        print(rowsum)
         d_inv = np.power(rowsum, -1).flatten()
         d_inv[np.isinf(d_inv)] = 0.
         d_mat = sp.diags(d_inv)
         d_mat = d_mat.tocsr()
-        similarity_sotfmax = similarity_exp.dot(d_mat)
+        print(d_mat)
+        similarity_sotfmax = d_mat.dot(similarity_exp)
+        rowsum = np.array(similarity_sotfmax.sum(axis=1))
+        print(rowsum)
         return similarity_sotfmax + E
 
     def getSimilarity(self):
         print("loading similarity matrix")
         if self.similarity is None:
             # try:
-            similarity = sp.load_npz(self.path + '/similarity_mat.npz')
+            similarity = sp.load_npz(self.path + '/similarity_mat_sample.npz')
             print("successfully loaded similarity...")
             # print(len(similarity.data))
 
@@ -265,24 +309,24 @@ class Loader(BasicDataset):
 
 
             # sample
-            if args.neighbor != 0:
-                row = similarity.shape[0]
-                similarity = similarity.tolil()
-                for i in range(row):
-                    tmp = similarity.getrow(i).toarray()[0]
-                    rank_index = tmp.argsort()[::-1]
-                    rank_index = rank_index[:args.neighbor+1]
-                    for j in range(row):
-                        if j not in rank_index:
-                            tmp[j] = 0
-                    similarity[i,:] = tmp
-                    print(i)
+            # if args.neighbor != 0:
+            #     row = similarity.shape[0]
+            #     similarity = similarity.tolil()
+            #     for i in range(row):
+            #         tmp = similarity.getrow(i).toarray()[0]
+            #         rank_index = tmp.argsort()[::-1]
+            #         rank_index = rank_index[:args.neighbor+1]
+            #         for j in range(row):
+            #             if j not in rank_index:
+            #                 tmp[j] = 0
+            #         similarity[i,:] = tmp
+            #         print(i)
 
             similarity = similarity.tocsr()
             print(len(similarity.data))
-            sp.save_npz(self.path + '/similarity_mat_sample_30.npz', similarity)
+            # sp.save_npz(self.path + '/similarity_mat_sample_30.npz', similarity)
             # sotfmax
-            exit()
+            # exit()
             similarity = self.softmax(similarity)
             print(len(similarity.data))
 
@@ -333,5 +377,5 @@ class Loader(BasicDataset):
             negItems.append(self.allNeg[user])
         return negItems
 
-dataset = Loader(path="Data/"+args.dataset)
-dataset.getSimilarity()
+# dataset = Loader(path="Data/"+args.dataset)
+# dataset.getSparseLGraph()
