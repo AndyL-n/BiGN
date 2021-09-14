@@ -282,6 +282,18 @@ class Loader(BasicDataset):
         print(rowsum)
         return similarity_sotfmax + E
 
+    # def min_max(self, similarity):
+    #     E = sp.eye(similarity.shape[0])
+    #     similarity_exp = similarity - E
+    #     rowmax = np.array(similarity_exp.max(axis=1))
+    #     d_inv = np.power(rowmax, -1).flatten()
+    #     d_inv[np.isinf(d_inv)] = 0.
+    #     d_mat = sp.diags(d_inv)
+    #     d_mat = d_mat.tocsr()
+    #     similarity_minmax =
+    #     return
+
+
     def getSimilarity(self):
         print("loading similarity matrix")
         if self.similarity is None:

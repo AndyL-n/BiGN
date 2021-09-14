@@ -2,6 +2,7 @@ import torch as t
 from dataloader import BasicDataset
 from torch import nn
 from parse import cprint
+from sys import exit
 
 class BasicModel(nn.Module):
     def __init__(self):
@@ -383,19 +384,20 @@ class DGCN_HN(BasicModel):
             else:
                 side_emb = t.sparse.mm(g_droped, all_emb)
                 side_L_emb = t.sparse.mm(l_droped, all_emb)
-            print(side_emb.shape)
-            print(side_L_emb.shape)
             attention_s = t.mean((side_emb * all_emb + side_emb) , dim=1)
             attention_l = t.mean((side_L_emb * all_emb + side_L_emb) , dim=1)
-            attention = t.exp(attention_s) + t.exp(attention_s)
+            attention = t.exp(attention_s) + t.exp(attention_l)
             attention_s = t.exp(attention_s) / attention
             attention_l = t.exp(attention_l) / attention
             attention_s = attention_s.unsqueeze(1)
             attention_l = attention_l.unsqueeze(1)
-            # print(attention_s.shape)
-            # print(attention_l.shape)
+            print(attention_s)
+            print(side_emb)
+            print(attention_s*side_emb)
+            print(attention_s+attention_l)
             all_emb = all_emb + (attention_s * side_emb) + (attention_l * side_L_emb)
-            # print(all_emb.shape)
+            print(all_emb.shape)
+            exit()
             embs.append(all_emb)
         embs = t.stack(embs, dim=1)
         # print(embs.size())
