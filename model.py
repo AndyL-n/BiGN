@@ -11,7 +11,6 @@ class BasicModel(nn.Module):
     def getUsersRating(self, users):
         raise NotImplementedError
 
-
 class PairWiseModel(BasicModel):
     def __init__(self):
         super(PairWiseModel, self).__init__()
@@ -107,9 +106,10 @@ class LightGCN(BasicModel):
                 for f in range(len(g_droped)):
                     temp_emb.append(t.sparse.mm(g_droped[f], all_emb))
                 side_emb = t.cat(temp_emb, dim=0)
-                all_emb = side_emb
             else:
-                all_emb = t.sparse.mm(g_droped, all_emb)
+                side_emb = t.sparse.mm(g_droped, all_emb)
+
+            all_emb = side_emb + all_emb if self.args.residual else side_emb
             embs.append(all_emb)
         embs = t.stack(embs, dim=1)
         # print(embs.size())
@@ -445,3 +445,39 @@ class DGCN_HN(BasicModel):
         scores = t.mul(users_emb, items_emb)
         scores = t.sum(scores, dim=1)
         return scores
+
+class NCF(BasicModel):
+    def __init__(self, args, dataset: BasicDataset):
+        super(NCF, self).__init__()
+        self.args = args
+        self.dataset: dataloader.BasicDataset = dataset
+
+class GCN(BasicModel):
+    def __init__(self, args, dataset: BasicDataset):
+        super(GCN, self).__init__()
+        self.args = args
+        self.dataset: dataloader.BasicDataset = dataset
+
+class NGCF(BasicModel):
+    def __init__(self, args, dataset: BasicDataset):
+        super(NGCG, self).__init__()
+        self.args = args
+        self.dataset: dataloader.BasicDataset = dataset
+
+class GCMC(BasicModel):
+    def __init__(self, args, dataset: BasicDataset):
+        super(GCMC, self).__init__()
+        self.args = args
+        self.dataset: dataloader.BasicDataset = dataset
+
+class Two_tower(BasicModel):
+    def __init__(self, args, dataset: BasicDataset):
+        super(Two_tower, self).__init__()
+        self.args = args
+        self.dataset: dataloader.BasicDataset = dataset
+
+class BPRMF(BasicModel):
+    def __init__(self, args, dataset: BasicDataset):
+        super(BPRMF, self).__init__()
+        self.args = args
+        self.dataset: dataloader.BasicDataset = dataset

@@ -7,7 +7,7 @@ import torch as t
 def parse_args():
     parser = argparse.ArgumentParser(description="Run BiGN.")
     parser.add_argument('--model_name', type=str, default='DGCN_HN',
-                        help="The name of model. support [BiGN, LightGCN, DGCN_HN]")
+                        help="The name of model. support [BiGN, LightGCN, DGCN_HN, GCN, GCMC, NGCF, NCF, TT, BPRMF]")
     parser.add_argument('--train_batch', type=int,default=2048,
                         help="The batch size for bpr loss training procedure.")
     parser.add_argument('--test_batch', type=int, default=1024,
@@ -44,7 +44,7 @@ def parse_args():
                         help="The number of epochs.")
     parser.add_argument('--normalization', type=str, default='connect_symmetric',
                         help='The approach of normalization, support [symmetric, connect_symmetric, L, R, sotfmax, min_max, min_max&sotfmax]')
-    parser.add_argument('--residual', type=bool, default=True,
+    parser.add_argument('--residual', type=bool, default=False,
                         help='whether we use residual connection or not')
     parser.add_argument('--pretrain', type=bool, default=False,
                         help='whether we use pretrained weight or not')
