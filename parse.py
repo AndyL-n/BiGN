@@ -7,7 +7,7 @@ import torch as t
 def parse_args():
     parser = argparse.ArgumentParser(description="Run BiGN.")
     parser.add_argument('--model_name', type=str, default='DGCN_HN',
-                        help="The name of model.")
+                        help="The name of model. support [BiGN, LightGCN, DGCN_HN]")
     parser.add_argument('--train_batch', type=int,default=2048,
                         help="The batch size for bpr loss training procedure.")
     parser.add_argument('--test_batch', type=int, default=1024,
@@ -30,27 +30,26 @@ def parse_args():
                         help="the fold num used to split large adj matrix, like gowalla")
     parser.add_argument('--dataset', type=str,default='gowalla',
                         help="available datasets: [gowalla, yelp2018, amazon-book]")
-    parser.add_argument('--path', type=str,default="./checkpoints",
-                        help="path to save weights")
+    # parser.add_argument('--path', type=str,default="./checkpoints",
+    #                     help="path to save weights")
     parser.add_argument('--topks', nargs='?',default="[20]",
                         help="@k test list")
     # parser.add_argument('--tensorboard', type=int,default=1,
     #                     help="enable tensorboard")
     # parser.add_argument('--comment', type=str,default="lgn",
     #                     help="Comment.")
-    parser.add_argument('--neighbor', type=int, default=30,
+    parser.add_argument('--neighbor', type=int, default=20,
                         help="The number of neighbor.")
-    parser.add_argument('--load', type=int,default=0)
-    parser.add_argument('--epochs', type=int,default=1000,
+    parser.add_argument('--epochs', type=int, default=1000,
                         help="The number of epochs.")
-    parser.add_argument('--multicore', type=int, default=0,
-                        help='whether we use multiprocessing or not in test')
+    parser.add_argument('--normalization', type=str, default='connect_symmetric',
+                        help='The approach of normalization, support [symmetric, connect_symmetric, L, R, sotfmax, min_max, min_max&sotfmax]')
+    parser.add_argument('--residual', type=bool, default=True,
+                        help='whether we use residual connection or not')
     parser.add_argument('--pretrain', type=bool, default=False,
                         help='whether we use pretrained weight or not')
     parser.add_argument('--seed', type=int, default=2020,
                         help='random seed')
-    parser.add_argument('--model', type=str, default='lgn',
-                        help='rec-model, support [lgn]')
     parser.add_argument('--cv', type=int, default=1)
     parser.add_argument('--save', type=int, default=0)
     parser.add_argument('--top_k', type=int, default=20)

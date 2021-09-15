@@ -6,6 +6,7 @@ from scipy.sparse import csr_matrix
 import scipy.sparse as sp
 from sklearn.preprocessing import normalize
 from time import time
+from tqdm import tqdm
 from parse import cprint, args
 from sys import exit
 from sklearn.metrics import pairwise_distances
@@ -118,6 +119,7 @@ class Loader(BasicDataset):
         
         self.Graph = None
         self.LGraph = None
+        self.RGraph = None
         self.similarity = None
 
         print(f"{self.n_user} users")
@@ -127,8 +129,24 @@ class Loader(BasicDataset):
         print(f"{args.dataset} Sparsity : {(self.trainDataSize + self.testDataSize) / self.n_users / self.m_items}")
 
         # (users,items), bipartite graph
-        self.UserItemNet = csr_matrix((np.ones(len(self.trainUser)), (self.trainUser, self.trainItem)),
-                                      shape=(self.n_user, self.m_item))
+        self.UserItemNet = csr_matrix((np.ones(len(self.trainUser)), (self.trainUser, self.trainItem)), shape=(self.n_user, self.m_item))
+        try:
+            self.adj_mat = sp.load_npz(self.path + '/adj_mat.npz')
+            print("successfully loaded adjacency matrix...")
+        except:
+            self.adj_mat = sp.dok_matrix((self.n_users + self.m_items, self.n_users + self.m_items), dtype=np.float32)
+            self.adj_mat = self.adj_mat.tolil()
+            R = self.UserItemNet.tolil()
+            # prevent memory from overflowing
+            for i in tqdm(range(5)):
+                self.adj_mat[int(self.n_users * i / 5.0):int(self.n_users * (i + 1.0) / 5), self.n_users:] = \
+                    R[int(self.n_users * i / 5.0):int(self.n_users * (i + 1.0) / 5)]
+                self.adj_mat[self.n_users:, int(self.n_users * i / 5.0):int(self.n_users * (i + 1.0) / 5)] = \
+                    R[int(self.n_users * i / 5.0):int(self.n_users * (i + 1.0) / 5)].T
+            self.adj_mat = self.adj_mat.tocsr()
+            print('already create adjacency matrix', self.adj_mat.shape)
+            sp.save_npz(self.path + '/adj_mat.npz', self.adj_mat)
+
         self.users_D = np.array(self.UserItemNet.sum(axis=1)).squeeze()
         self.users_D[self.users_D == 0.] = 1
         self.items_D = np.array(self.UserItemNet.sum(axis=0)).squeeze()
@@ -179,21 +197,17 @@ class Loader(BasicDataset):
         return torch.sparse.FloatTensor(index, data, torch.Size(coo.shape))
         
     def getSparseGraph(self):
-        print("loading adjacency matrix")
+        print("loading symmetric norm adjacency matrix")
         if self.Graph is None:
             try:
-                pre_adj_mat = sp.load_npz(self.path + '/s_pre_adj_mat.npz')
-                print("successfully loaded...")
+                pre_adj_mat = sp.load_npz(self.path + '/adj_symmetric_mat.npz')
+                print("successfully loaded symmetric norm adjacency matrix...")
                 norm_adj = pre_adj_mat
             except :
-                print("generating adjacency matrix")
+                print("generating symmetric norm adjacency matrix")
                 s = time()
-                adj_mat = sp.dok_matrix((self.n_users + self.m_items, self.n_users + self.m_items), dtype=np.float32)
-                adj_mat = adj_mat.tolil()
-                R = self.UserItemNet.tolil()
-                adj_mat[:self.n_users, self.n_users:] = R
-                adj_mat[self.n_users:, :self.n_users] = R.T
-                adj_mat = adj_mat.todok()
+
+                adj_mat = self.adj_mat.todok()
                 # adj_mat = adj_mat + sp.eye(adj_mat.shape[0])
                 
                 rowsum = np.array(adj_mat.sum(axis=1))
@@ -205,8 +219,8 @@ class Loader(BasicDataset):
                 norm_adj = norm_adj.dot(d_mat)
                 norm_adj = norm_adj.tocsr()
                 end = time()
-                print(f"costing {end-s}s, saved norm_mat...")
-                sp.save_npz(self.path + '/s_pre_adj_mat.npz', norm_adj)
+                print(f"costing {end-s}s, saved adj_symmetric_mat...")
+                sp.save_npz(self.path + '/adj_symmetric_mat.npz', norm_adj)
 
             if self.split == True:
                 self.Graph = self._split_A_hat(norm_adj)
@@ -218,22 +232,18 @@ class Loader(BasicDataset):
         return self.Graph
 
     def getSparseLGraph(self):
-        print("loading L adjacency matrix")
+        print("loading L norm adjacency matrix")
         if self.LGraph is None:
             try:
-                pre_adj_mat = sp.load_npz(self.path + '/s_pre_L_adj_mat.npz')
-                print("successfully loaded...")
+                pre_adj_mat = sp.load_npz(self.path + '/adj_L_mat.npz')
+                print("successfully loaded L norm adjacency matrix...")
                 norm_adj = pre_adj_mat
                 # print(norm_adj)
             except:
-                print("generating L adjacency matrix")
+                print("generating L norm adjacency  matrix")
                 s = time()
-                adj_mat = sp.dok_matrix((self.n_users + self.m_items, self.n_users + self.m_items), dtype=np.float32)
-                adj_mat = adj_mat.tolil()
-                R = self.UserItemNet.tolil()
-                adj_mat[:self.n_users, self.n_users:] = R
-                adj_mat[self.n_users:, :self.n_users] = R.T
-                adj_mat = adj_mat.todok()
+
+                adj_mat = self.adj_mat.todok()
                 # adj_mat = adj_mat + sp.eye(adj_mat.shape[0])
 
                 rowsum = np.array(adj_mat.sum(axis=1))
@@ -244,8 +254,8 @@ class Loader(BasicDataset):
                 norm_adj = d_mat.dot(adj_mat)
                 norm_adj = norm_adj.tocsr()
                 end = time()
-                print(f"costing {end - s}s, saved norm_mat...")
-                sp.save_npz(self.path + '/s_pre_L_adj_mat.npz', norm_adj)
+                print(f"costing {end - s}s, saved adj_L_mat...")
+                sp.save_npz(self.path + '/adj_L_mat.npz', norm_adj)
 
             if self.split == True:
                 self.LGraph = self._split_A_hat(norm_adj)
@@ -256,91 +266,203 @@ class Loader(BasicDataset):
                 print("don't split the matrix")
         return self.LGraph
 
-    # def coo_cosine_similarity(input_coo_matrix):
-    #     sq = lambda x: x * x.T
-    #     output_csr_matrix = input_coo_matrix.tocsr()
-    #     sqrt_sum_square_rows = np.array(np.sqrt(sq(output_csr_matrix).sum(axis=1)))[:, 0]
-    #     output_csr_matrix.data /= rows_sums_sqrt[input_coo_matrix.row]
-    #     return sq(output_csr_matrix)
+    def getSparseRGraph(self):
+        print("loading R norm adjacency matrix")
+        if self.RGraph is None:
+            try:
+                pre_adj_mat = sp.load_npz(self.path + '/adj_R_mat.npz')
+                print("successfully loaded R norm adjacency matrix...")
+                norm_adj = pre_adj_mat
+                # print(norm_adj)
+            except:
+                print("generating R norm adjacency matrix")
+                s = time()
+                adj_mat = self.adj_mat.todok()
+                # adj_mat = adj_mat + sp.eye(adj_mat.shape[0])
 
-    def softmax(self, similarity):
-        # print(similarity)
+                rowsum = np.array(adj_mat.sum(axis=1))
+                d_inv = np.power(rowsum, -1).flatten()
+                d_inv[np.isinf(d_inv)] = 0.
+                d_mat = sp.diags(d_inv)
+
+                norm_adj = adj_mat.dot(d_mat)
+                norm_adj = norm_adj.tocsr()
+                end = time()
+                print(f"costing {end - s}s, saved adj_R_mat...")
+                sp.save_npz(self.path + '/adj_R_mat.npz', norm_adj)
+
+            if self.split == True:
+                self.RGraph = self._split_A_hat(norm_adj)
+                print("done split matrix")
+            else:
+                self.RGraph = self._convert_sp_mat_to_sp_tensor(norm_adj)
+                self.RGraph = self.RGraph.coalesce().to(args.device)
+                print("don't split the matrix")
+        return self.RGraph
+
+    def normalization(self, similarity):
         E = sp.eye(similarity.shape[0])
-        # print(E)
-        similarity_exp = similarity - E
-        # similarity_exp = similarity
-        similarity_exp.data = np.exp(similarity_exp.data)
-        rowsum = np.array(similarity_exp.sum(axis=1))
-        print(rowsum)
-        d_inv = np.power(rowsum, -1).flatten()
-        d_inv[np.isinf(d_inv)] = 0.
-        d_mat = sp.diags(d_inv)
-        d_mat = d_mat.tocsr()
-        print(d_mat)
-        similarity_sotfmax = d_mat.dot(similarity_exp)
-        rowsum = np.array(similarity_sotfmax.sum(axis=1))
-        print(rowsum)
-        return similarity_sotfmax + E
+        similarity = similarity - E
+        print(f"{args.normalization} normalization")
+        try:
+            similarity = sp.load_npz(self.path + '/similarity_mat_sample_' + str(args.neighbor) + '_' + args.normalization + '.npz')
+            print(f"successfully loaded similarity(sample{args.neighbor})_{args.normalization}...")
+        except:
+            s = time()
+            if args.normalization == 'symmetric':
+                print("generating symmetric normalization")
+                adj_mat = csr_matrix((np.array([1 for _ in range(len(similarity.data))]), similarity.nonzero()), shape=similarity.shape)
+                rowsum = np.array(adj_mat.sum(axis=1))
+                d_inv = np.power(rowsum, -0.5).flatten()
+                d_inv[np.isinf(d_inv)] = 0.
+                d_mat = sp.diags(d_inv)
 
-    # def min_max(self, similarity):
-    #     E = sp.eye(similarity.shape[0])
-    #     similarity_exp = similarity - E
-    #     rowmax = np.array(similarity_exp.max(axis=1))
-    #     d_inv = np.power(rowmax, -1).flatten()
-    #     d_inv[np.isinf(d_inv)] = 0.
-    #     d_mat = sp.diags(d_inv)
-    #     d_mat = d_mat.tocsr()
-    #     similarity_minmax =
-    #     return
+                similarity = d_mat.dot(adj_mat)
+                similarity = similarity.dot(d_mat)
+                similarity.sort_indices()
+                sp.save_npz(self.path + '/similarity_mat_sample_' + str(args.neighbor) + '_' + args.normalization + '.npz', similarity)
 
+            elif args.normalization == 'connect_symmetric':
+                print("generating connect_symmetric normalization")
+                adj_mat = self.adj_mat.tocsr()
+                adj_mat = adj_mat + csr_matrix((np.array([1 for _ in range(len(similarity.data))]), similarity.nonzero()),shape=similarity.shape)
+
+                adj_mat = adj_mat.todok()
+
+                rowsum = np.array(adj_mat.sum(axis=1))
+                d_inv = np.power(rowsum, -1).flatten()
+                d_inv[np.isinf(d_inv)] = 0.
+                d_mat = sp.diags(d_inv)
+
+                norm_adj = d_mat.dot(adj_mat)
+                norm_adj = norm_adj.dot(d_mat)
+                similarity = norm_adj.tocsr()
+
+                sp.save_npz(self.path + '/similarity_mat_sample_' + str(args.neighbor) + '_' + args.normalization + '.npz',similarity)
+
+            elif args.normalization == 'sotfmax':
+                print("generating sotfmax normalization")
+
+                similarity.data = np.exp(similarity.data)
+                rowsum = np.array(similarity.sum(axis=1))
+
+                d_inv = np.power(rowsum, -1).flatten()
+                d_inv[np.isinf(d_inv)] = 0.
+                d_mat = sp.diags(d_inv)
+                d_mat = d_mat.tocsr()
+
+                similarity = d_mat.dot(similarity)
+                similarity.sort_indices()
+                sp.save_npz(self.path + '/similarity_mat_sample_' + str(args.neighbor) + '_' + args.normalization + '.npz', similarity)
+
+            elif args.normalization == 'min_max':
+                print("generating min_max normalization")
+                rowmax = np.array(similarity.max(axis=1).data)
+                print(rowmax)
+                d_inv = np.power(rowmax, -1).flatten()
+                d_inv[np.isinf(d_inv)] = 0.
+                d_mat = sp.diags(d_inv)
+                d_mat = d_mat.tocsr()
+                print(d_mat)
+                similarity = d_mat.dot(similarity)
+                similarity.sort_indices()
+                sp.save_npz(self.path + '/similarity_mat_sample_' + str(args.neighbor) + '_' + args.normalization + '.npz', similarity)
+
+            elif args.normalization == 'min_max&sotfmax':
+                print("generating min_max&sotfmax normalization")
+                rowmax = np.array(similarity.max(axis=1).data)
+                d_inv = np.power(rowmax, -1).flatten()
+                d_inv[np.isinf(d_inv)] = 0.
+                d_mat = sp.diags(d_inv)
+                d_mat = d_mat.tocsr()
+                similarity = d_mat.dot(similarity)
+
+                similarity.data = np.exp(similarity.data)
+                rowsum = np.array(similarity.sum(axis=1))
+
+                d_inv = np.power(rowsum, -1).flatten()
+                d_inv[np.isinf(d_inv)] = 0.
+                d_mat = sp.diags(d_inv)
+                d_mat = d_mat.tocsr()
+
+                similarity = d_mat.dot(similarity)
+                similarity.sort_indices()
+                sp.save_npz(self.path + '/similarity_mat_sample_' + str(args.neighbor) + '_' + args.normalization + '.npz', similarity)
+
+            else:
+                print("don't normalize the similarity matrix")
+
+            end = time()
+            print(f"costing {end - s}s, normalization similarity...")
+
+        return similarity.tocsr()
 
     def getSimilarity(self):
         print("loading similarity matrix")
         if self.similarity is None:
-            # try:
-            similarity = sp.load_npz(self.path + '/similarity_mat_sample.npz')
-            print("successfully loaded similarity...")
-            # print(len(similarity.data))
+            if args.neighbor == 0:
+                try:
+                    similarity = sp.load_npz(self.path + '/similarity_mat.npz')
+                    print("successfully loaded similarity...")
+                except:
+                    print("generating similarity matrix")
+                    s = time()
+                    similarity = sp.dok_matrix((self.n_users + self.m_items, self.n_users + self.m_items), dtype=np.float32)
+                    similarity = similarity.tolil()
+                    R = self.UserItemNet.tolil()
+                    print("generating user similarity")
+                    dist_out = 1 - pairwise_distances(R, metric="cosine")
+                    similarity[:self.n_users, :self.n_users] = dist_out
+                    print("generating item similarity")
+                    dist_out = 1 - pairwise_distances(R.T, metric="cosine")
+                    similarity[self.n_users:, self.n_users:] = dist_out
+                    similarity = similarity.tocsr()
+                    end = time()
+                    print(f"costing {end - s}s, saved similarity_mat...")
+                    sp.save_npz(self.path + '/similarity_mat.npz', similarity)
+            else:
+                try:
+                    similarity = sp.load_npz(self.path + '/similarity_mat_sample_' + str(args.neighbor) + '.npz')
+                    print(f"successfully loaded similarity(sample{args.neighbor})...")
+                except:
+                    try:
+                        similarity = sp.load_npz(self.path + '/similarity_mat.npz')
+                        print("successfully loaded similarity...")
+                    except:
+                        print("generating similarity matrix")
+                        s = time()
+                        similarity = sp.dok_matrix((self.n_users + self.m_items, self.n_users + self.m_items),
+                                                   dtype=np.float32)
+                        similarity = similarity.tolil()
+                        R = self.UserItemNet.tolil()
+                        print("generating user similarity")
+                        dist_out = 1 - pairwise_distances(R, metric="cosine")
+                        similarity[:self.n_users, :self.n_users] = dist_out
+                        print("generating item similarity")
+                        dist_out = 1 - pairwise_distances(R.T, metric="cosine")
+                        similarity[self.n_users:, self.n_users:] = dist_out
+                        similarity = similarity.tocsr()
+                        end = time()
+                        print(f"costing {end - s}s, saved similarity_mat...")
+                        sp.save_npz(self.path + '/similarity_mat.npz', similarity)
 
-            # except :
-            #     print("generating similarity matrix")
-            #     s = time()
-            #     similarity = sp.dok_matrix((self.n_users + self.m_items, self.n_users + self.m_items), dtype=np.float32)
-            #     similarity = similarity.tolil()
-            #     R = self.UserItemNet.tolil()
-            #     print("generating user similarity")
-            #     dist_out = 1 - pairwise_distances(R, metric="cosine")
-            #     similarity[:self.n_users, :self.n_users] = dist_out
-            #     print("generating item similarity")
-            #     dist_out = 1 - pairwise_distances(R.T, metric="cosine")
-            #     similarity[self.n_users:, self.n_users:] = dist_out
-            #     similarity = similarity.tocsr()
-            #     end = time()
-            #     print(f"costing {end-s}s, saved similarity_mat...")
-            #     sp.save_npz(self.path + '/similarity_mat.npz', similarity)
-
-
-            # sample
-            # if args.neighbor != 0:
-            #     row = similarity.shape[0]
-            #     similarity = similarity.tolil()
-            #     for i in range(row):
-            #         tmp = similarity.getrow(i).toarray()[0]
-            #         rank_index = tmp.argsort()[::-1]
-            #         rank_index = rank_index[:args.neighbor+1]
-            #         for j in range(row):
-            #             if j not in rank_index:
-            #                 tmp[j] = 0
-            #         similarity[i,:] = tmp
-            #         print(i)
+                    # sample
+                    row = similarity.shape[0]
+                    similarity = similarity.tolil()
+                    print("neighbor sampling")
+                    for i in tqdm(range(row)):
+                        tmp = similarity.getrow(i).toarray()[0]
+                        rank_index = tmp.argsort()[::-1]
+                        # (i,i) 相似度为 1
+                        rank_index = rank_index[:args.neighbor + 1]
+                        for j in range(row):
+                            if j not in rank_index:
+                                tmp[j] = 0
+                        similarity[i, :] = tmp
+                sp.save_npz(self.path + '/similarity_mat_sample_' + str(args.neighbor) + '.npz', similarity)
 
             similarity = similarity.tocsr()
-            print(len(similarity.data))
-            # sp.save_npz(self.path + '/similarity_mat_sample_30.npz', similarity)
-            # sotfmax
-            # exit()
-            similarity = self.softmax(similarity)
-            print(len(similarity.data))
+            similarity = self.normalization(similarity)
 
             if self.split == True:
                 self.similarity = self._split_A_hat(similarity)
@@ -389,5 +511,6 @@ class Loader(BasicDataset):
             negItems.append(self.allNeg[user])
         return negItems
 
-# dataset = Loader(path="Data/"+args.dataset)
-# dataset.getSparseLGraph()
+dataset = Loader(path="Data/"+args.dataset)
+dataset.getSparseLGraph()
+dataset.getSparseRGraph()

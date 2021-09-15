@@ -8,9 +8,8 @@ import pandas as pd
 import tensorflow as tf
 import time
 from tensorflow.keras.optimizers import Adam
-from BPR import BPR
-from NCF import NCF
-from load_data import load_data
+from temp.NCF import NCF
+from temp.load_data import load_data
 from evaluate import evaluate_model
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
