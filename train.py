@@ -59,7 +59,7 @@ if __name__ == '__main__':
         print('Iteration %d Fit [%.1f s], Evaluate [%.1f s]: HR = %.4f, NDCG = %.4f' % (epoch, t2 - t1, time.time() - t2, hit_rate, ndcg))
         results.append([epoch, t2 - t1, time.time() - t2, hit_rate, ndcg])
     # ========================== Write Log ===========================
-    timestamp = time.strftime('%Y-%m-%d-%H-%M', time.localtime(time.time()))
+    timestamp = time.strftime('%Y-%m-%d', time.localtime(time.time()))
     pd.DataFrame(results, columns=['Iteration', 'fit_time', 'evaluate_time', 'hit_rate', 'ndcg'])\
         .to_csv('log/{}_log_{}_dim_{}_K_{}_{}.csv'\
         .format(model_name, file, embed_dim, K, timestamp), index=False)

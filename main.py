@@ -30,7 +30,7 @@ def Train(dataset, recommend_model, loss_class, neg_k=1, ):
     for (batch_i, (batch_users, batch_pos, batch_neg)) in enumerate(
             minibatch(users, posItems, negItems, batch_size=args.train_batch)):
         cri = bpr.stageOne(batch_users, batch_pos, batch_neg)
-        # print(batch_i, aver_loss)
+        print(batch_i, aver_loss)
         aver_loss += cri
     aver_loss = aver_loss / total_batch
     time_info = timer.dict()
@@ -123,26 +123,25 @@ if __name__ == '__main__':
     model = model.to(args.device)
     bpr = BPRLoss(model, args)
     model.computer()
-    # Neg_k = 1
-    # results = []
-    # result = Test(dataset, model)
-    # precision, recall, ndcg = [result[x] for x in result]
-    # print(precision, recall, ndcg)
-    # results.append([0, 0, 0, 0, recall, ndcg, precision])
-    # pd.DataFrame(results, columns=['Iteration', 'fit_time', 'loss', 'evaluate_time', 'recall', 'ndcg', 'precision']) \
-    #     .to_csv('log/{}_log_{}_dim_{}_K_{}.csv'
-    #             .format(args.model_name, args.dataset, args.embed_size, args.topks, ), index=False)
-    # print('start training...')
-    # for epoch in range(args.epochs):
-    #     t1 = time()
-    #     output, loss = Train(dataset, model, bpr, neg_k=Neg_k)
-    #     print(loss)
-    #     print(f'EPOCH[{epoch + 1}/{args.epochs}] {output}')
-    #     t2 = time()
-    #     result = Test(dataset, model)
-    #     precision, recall, ndcg = [result[x] for x in result]
-    #     print(precision, recall, ndcg)
-    #     results.append([epoch + 1, t2-t1, loss, time()-t2, recall, ndcg, precision])
-    #     pd.DataFrame(results, columns=['Iteration', 'fit_time', 'loss', 'evaluate_time', 'recall', 'ndcg', 'precision'])\
-    #         .to_csv('log/{}_log_{}_dim_{}_K_{}.csv'
-    #                 .format(args.model_name, args.dataset, args.embed_size, args.topks,), index=False)
+    Neg_k = 1
+    results = []
+    result = Test(dataset, model)
+    precision, recall, ndcg = [result[x] for x in result]
+    print(precision, recall, ndcg)
+    results.append([0, 0, 0, 0, recall, ndcg, precision])
+    timestamp = time.strftime('%Y-%m-%d', time.localtime(time.time()))
+
+    print('start training...')
+    for epoch in range(args.epochs):
+        t1 = time()
+        output, loss = Train(dataset, model, bpr, neg_k=Neg_k)
+        print(loss)
+        print(f'EPOCH[{epoch + 1}/{args.epochs}] {output}')
+        t2 = time()
+        result = Test(dataset, model)
+        precision, recall, ndcg = [result[x] for x in result]
+        print(precision, recall, ndcg)
+        results.append([epoch + 1, t2-t1, loss, time()-t2, recall, ndcg, precision])
+        pd.DataFrame(results, columns=['Iteration', 'fit_time', 'loss', 'evaluate_time', 'recall', 'ndcg', 'precision'])\
+            .to_csv('log/{}_{}_layer{}_dim{}_K{}_lr{}_{}.csv'
+                    .format(args.model_name, args.dataset, args.layer, args.embed_size, args.topks, args.lr, timestamp), index=False)
