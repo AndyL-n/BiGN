@@ -545,8 +545,9 @@ class BPRMF(BasicModel):
         users_emb = self.embedding_user(users.long())       # [batch_szie * latent_dim]
         pos_emb = self.embedding_item(pos.long())           # [batch_szie * latent_dim]
         neg_emb = self.embedding_item(neg.long())           # [batch_szie * latent_dim]
-        pos_scores = t.sum(users_emb * pos_emb, dim=1)
-        neg_scores = t.sum(users_emb * neg_emb, dim=1)
+        pos_scores = t.sum(torch.mul(user_vector, pos_items_vector), dim=-1, keepdim=True)
+        neg_scores = t.sum(torch.mul(user_vector, neg_items_vector), dim=-1, keepdim=True)
+        loss = t.mean(- nn.functional.LogSigmoid(neg_scores - pos_scores))
         loss = t.mean(nn.functional.softplus(neg_scores - pos_scores))
         reg_loss = (1 / 2) * (users_emb.norm(2).pow(2) +
                               pos_emb.norm(2).pow(2) +

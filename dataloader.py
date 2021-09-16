@@ -515,6 +515,7 @@ class Loader(BasicDataset):
             negItems.append(self.allNeg[user])
         return negItems
 
-# dataset = Loader(path="Data/"+args.dataset)
+dataset = Loader(path="Data/"+args.dataset)
 # dataset.getSparseLGraph()
 # dataset.getSparseRGraph()
+print(dataset.allPos[0])
