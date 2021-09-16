@@ -197,6 +197,8 @@ class Loader(BasicDataset):
         return torch.sparse.FloatTensor(index, data, torch.Size(coo.shape))
         
     def getSparseGraph(self):
+        # L = D^-0.5 * A * D^-0.5
+        # L = D^-0.5 * (A + I) * D^-0.5
         print("loading symmetric norm adjacency matrix")
         if self.Graph is None:
             try:
@@ -232,6 +234,7 @@ class Loader(BasicDataset):
         return self.Graph
 
     def getSparseLGraph(self):
+        # L = D^-1 * A
         print("loading L norm adjacency matrix")
         if self.LGraph is None:
             try:
@@ -267,6 +270,7 @@ class Loader(BasicDataset):
         return self.LGraph
 
     def getSparseRGraph(self):
+        # L = A * D^-1
         print("loading R norm adjacency matrix")
         if self.RGraph is None:
             try:
@@ -511,6 +515,6 @@ class Loader(BasicDataset):
             negItems.append(self.allNeg[user])
         return negItems
 
-dataset = Loader(path="Data/"+args.dataset)
-dataset.getSparseLGraph()
-dataset.getSparseRGraph()
+# dataset = Loader(path="Data/"+args.dataset)
+# dataset.getSparseLGraph()
+# dataset.getSparseRGraph()

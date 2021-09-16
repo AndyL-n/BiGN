@@ -7,7 +7,7 @@ from utils import set_seed, BPRLoss, minibatch, RecallPrecision_ATk, getLabel, N
 import numpy as np
 import torch as t
 import pandas as pd
-from time import time
+from time import time, strftime, localtime
 
 
 def Train(dataset, recommend_model, loss_class, neg_k=1, ):
@@ -30,7 +30,7 @@ def Train(dataset, recommend_model, loss_class, neg_k=1, ):
     for (batch_i, (batch_users, batch_pos, batch_neg)) in enumerate(
             minibatch(users, posItems, negItems, batch_size=args.train_batch)):
         cri = bpr.stageOne(batch_users, batch_pos, batch_neg)
-        print(batch_i, aver_loss)
+        print(batch_i, cri)
         aver_loss += cri
     aver_loss = aver_loss / total_batch
     time_info = timer.dict()
@@ -122,14 +122,13 @@ if __name__ == '__main__':
     model = MODELS[args.model_name](args, dataset)
     model = model.to(args.device)
     bpr = BPRLoss(model, args)
-    model.computer()
     Neg_k = 1
     results = []
     result = Test(dataset, model)
     precision, recall, ndcg = [result[x] for x in result]
     print(precision, recall, ndcg)
     results.append([0, 0, 0, 0, recall, ndcg, precision])
-    timestamp = time.strftime('%Y-%m-%d', time.localtime(time.time()))
+    timestamp = strftime('%Y-%m-%d', localtime(time()))
 
     print('start training...')
     for epoch in range(args.epochs):

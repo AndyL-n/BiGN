@@ -451,6 +451,27 @@ class NCF(BasicModel):
         super(NCF, self).__init__()
         self.args = args
         self.dataset: dataloader.BasicDataset = dataset
+        self.__init_weight()
+
+    def __init_weight(self):
+        self.num_users = self.dataset.n_users
+        self.num_items = self.dataset.m_items
+        self.latent_dim = self.args.embed_size
+
+        self.embedding_GMF_user = t.nn.Embedding(num_embeddings=self.num_users, embedding_dim=self.latent_dim)
+        self.embedding_GMF_item = t.nn.Embedding(num_embeddings=self.num_items, embedding_dim=self.latent_dim)
+
+        self.embedding_MLP_item = t.nn.Embedding(num_embeddings=self.num_users, embedding_dim=self.latent_dim)
+        self.embedding_MLP_item = t.nn.Embedding(num_embeddings=self.num_items, embedding_dim=self.latent_dim)
+
+    def getUsersRating(self, users):
+        all_users, all_items = self.computer()
+        users_emb = all_users[users.long()]
+        items_emb = all_items
+        rating = self.f(t.matmul(users_emb, items_emb.t()))
+        return rating
+
+    # def bpr_loss(self, users, pos, neg):
 
 class GCN(BasicModel):
     def __init__(self, args, dataset: BasicDataset):
@@ -460,9 +481,25 @@ class GCN(BasicModel):
 
 class NGCF(BasicModel):
     def __init__(self, args, dataset: BasicDataset):
-        super(NGCG, self).__init__()
+        super(NGCF, self).__init__()
         self.args = args
         self.dataset: dataloader.BasicDataset = dataset
+        self.__init_weight()
+
+    def __init_weight(self):
+        self.num_users = self.dataset.n_users
+        self.num_items = self.dataset.m_items
+        self.latent_dim = self.args.embed_size
+
+        # xavier init
+        initializer = nn.init.xavier_uniform_
+        embedding_dict = nn.ParameterDict({
+            'user_emb': nn.Parameter(initializer(torch.empty(self.n_user,
+                                                             self.emb_size))),
+            'item_emb': nn.Parameter(initializer(torch.empty(self.n_item,
+                                                             self.emb_size)))
+        })
+
 
 class GCMC(BasicModel):
     def __init__(self, args, dataset: BasicDataset):
@@ -481,3 +518,45 @@ class BPRMF(BasicModel):
         super(BPRMF, self).__init__()
         self.args = args
         self.dataset: dataloader.BasicDataset = dataset
+        self.__init_weight()
+
+    def __init_weight(self):
+        self.num_users = self.dataset.n_users
+        self.num_items = self.dataset.m_items
+        self.latent_dim = self.args.embed_size
+
+        self.embedding_user = t.nn.Embedding(num_embeddings=self.num_users, embedding_dim=self.latent_dim)
+        self.embedding_item = t.nn.Embedding(num_embeddings=self.num_items, embedding_dim=self.latent_dim)
+        print("using Normal distribution N(0,1) initialization for BPRMF")
+
+        self.f = nn.Sigmoid()
+        print(f"{self.args.model_name} is already to go(dropout:{self.args.dropout})")
+
+    def getUsersRating(self, users):
+        users = users.long()
+        # [batch_szie * latent_dim]
+        users_emb = self.embedding_user(users)
+        items_emb = self.embedding_item.weight
+        # [batch_szie * latent_dim][latent_dim * num_items] = [batch_szie * num_items]
+        scores = t.matmul(users_emb, items_emb.t())
+        return self.f(scores)
+
+    def bpr_loss(self, users, pos, neg):
+        users_emb = self.embedding_user(users.long())       # [batch_szie * latent_dim]
+        pos_emb = self.embedding_item(pos.long())           # [batch_szie * latent_dim]
+        neg_emb = self.embedding_item(neg.long())           # [batch_szie * latent_dim]
+        pos_scores = t.sum(users_emb * pos_emb, dim=1)
+        neg_scores = t.sum(users_emb * neg_emb, dim=1)
+        loss = t.mean(nn.functional.softplus(neg_scores - pos_scores))
+        reg_loss = (1 / 2) * (users_emb.norm(2).pow(2) +
+                              pos_emb.norm(2).pow(2) +
+                              neg_emb.norm(2).pow(2)) / float(len(users))
+        return loss, reg_loss
+
+    def forward(self, users, items):
+        users = users.long()
+        items = items.long()
+        users_emb = self.embedding_user(users)
+        items_emb = self.embedding_item(items)
+        scores = torch.sum(users_emb*items_emb, dim=1)
+        return self.f(scores)
