@@ -446,9 +446,9 @@ class DGCN_HN(BasicModel):
         scores = t.sum(scores, dim=1)
         return scores
 
-class NCF(BasicModel):
+class NeuMF(BasicModel):
     def __init__(self, args, dataset: BasicDataset):
-        super(NCF, self).__init__()
+        super(NeuMF, self).__init__()
         self.args = args
         self.dataset: dataloader.BasicDataset = dataset
         self.__init_weight()
@@ -545,9 +545,9 @@ class BPRMF(BasicModel):
         users_emb = self.embedding_user(users.long())       # [batch_szie * latent_dim]
         pos_emb = self.embedding_item(pos.long())           # [batch_szie * latent_dim]
         neg_emb = self.embedding_item(neg.long())           # [batch_szie * latent_dim]
-        pos_scores = t.sum(torch.mul(user_vector, pos_items_vector), dim=-1, keepdim=True)
-        neg_scores = t.sum(torch.mul(user_vector, neg_items_vector), dim=-1, keepdim=True)
-        loss = t.mean(- nn.functional.LogSigmoid(neg_scores - pos_scores))
+        pos_scores = t.sum(t.mul(users_emb, pos_emb), dim=-1, keepdim=True)
+        neg_scores = t.sum(t.mul(users_emb, neg_emb), dim=-1, keepdim=True)
+        # loss = t.mean(-1.0 * nn.functional.LogSigmoid(neg_scores - pos_scores))
         loss = t.mean(nn.functional.softplus(neg_scores - pos_scores))
         reg_loss = (1 / 2) * (users_emb.norm(2).pow(2) +
                               pos_emb.norm(2).pow(2) +

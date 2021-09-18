@@ -123,7 +123,7 @@ if __name__ == '__main__':
         for (batch_i, (batch_users, batch_pos, batch_neg)) in enumerate(
                 minibatch(users, posItems, negItems, batch_size=args.train_batch)):
             loss, reg_loss = model.bpr_loss(batch_users, batch_pos, batch_neg)
-            reg_loss = reg_loss * args.weight_decay
+            reg_loss = reg_loss * args.decay
             loss = loss + reg_loss
 
             optimizer.zero_grad()
@@ -138,7 +138,7 @@ if __name__ == '__main__':
         result = Test(dataset, model)
         precision, recall, ndcg = [result[x] for x in result]
         print(precision, recall, ndcg)
-        results.append([epoch + 1, t2-t1, loss, time()-t2, recall, ndcg, precision])
+        results.append([epoch + 1, t2-t1, aver_loss, time()-t2, recall, ndcg, precision])
         pd.DataFrame(results, columns=['Iteration', 'fit_time', 'loss', 'evaluate_time', 'recall', 'ndcg', 'precision'])\
-            .to_csv('log/{}_{}_layer{}_dim{}_K{}_lr{}_{}.csv'
-                    .format(args.model_name, args.dataset, args.layer, args.embed_size, args.topks, args.lr, timestamp), index=False)
+            .to_csv('log/{}_{}_layer{}_dim{}_batch{}_K{}_lr{}_{}.csv'
+                    .format(args.model_name, args.dataset, args.layer, args.embed_size, args.train_batch, args.topks, args.lr, timestamp), index=False)

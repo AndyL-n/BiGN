@@ -21,12 +21,12 @@ MODELS = {
     'GCN': model.GCN,           # 'Semi-Supervised Classification with Graph Convolutional Networks', ICLR2018
     'GCMC': model.GCMC,         # 'Graph Convolutional Matrix Completion', KDD2018
     'NGCF':model.NGCF,          # 'Neural Graph Collaborative Filtering', SIGIR2019
-    'NCF': model.NCF,           # 'Neural Collaborative Filtering', WWW2017
+    'NCF': model.NeuMF,         # 'Neural Collaborative Filtering', WWW2017
     'TT': model.Two_tower,      # 'Learning deep structured semantic models for web search using clickthrough data', 2013
     'BPRMF': model.BPRMF,       # 'BPR: Bayesian personalized ranking from implicit feedback', 2009
     'GRMF': None,               # 'Collaborative filtering with graph information: Consistency and scalable methods' NIPS2018
     'GRMF-norm': None,          # 'Collaborative filtering with graph information: Consistency and scalable methods' NIPS2018
-    'Multi-GCCF': None,         # 'Multi-Graph Convolution Collaborative Filtering',
+    'Multi-GCCF': None,         # 'Multi-Graph Convolution Collaborative Filtering', ICDM2019
     'PinSage': None,            # 'Graph Convolutional Neural Networks for Web-Scale Recommender Systems', SIGKDD2018
     'ResGCN': None,             # 'Deepgcns: Can gcns go as deep as cnns?', IEEE2019
     'SGL-ED': None,             # 'Self-supervised Graph Learning for Recommendation', SIGIR2021
