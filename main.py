@@ -10,7 +10,7 @@ import pandas as pd
 from time import time, strftime, localtime
 import torch.optim as optim
 
-def test_one_batch(X):
+def test_one_user(X):
     sorted_items = X[0].numpy()
     groundTrue = X[1]
     r = getLabel(groundTrue, sorted_items)
@@ -46,20 +46,26 @@ def Test(dataset, model):
         groundTrue_list = []
         # auc_record = []
         # ratings = []
-        total_batch = len(users) // batch_size + 1
+        total_batch = (len(users) - 1) // batch_size + 1
         for batch_users in minibatch(users, batch_size=batch_size):
+            # train 数据
             allPos = dataset.getUserPosItems(batch_users)
+            # test 数据
             groundTrue = [testDict[u] for u in batch_users]
+            # batch内的user [batch * 1]
             batch_users_gpu = t.Tensor(batch_users).long()
             batch_users_gpu = batch_users_gpu.to(args.device)
-
+            # batch所有的评分[batch * n_items]
             rating = model.getUsersRating(batch_users_gpu)
             #rating = rating.cpu()
             exclude_index = []
             exclude_items = []
             for range_i, items in enumerate(allPos):
+                # 行
                 exclude_index.extend([range_i] * len(items))
+                # 列
                 exclude_items.extend(items)
+            # train数据 改为特别小， 不参与预测
             rating[exclude_index, exclude_items] = -(1<<10)
             _, rating_K = t.topk(rating, k=max_K)
             rating = rating.cpu().numpy()
@@ -77,7 +83,7 @@ def Test(dataset, model):
         X = zip(rating_list, groundTrue_list)
         pre_results = []
         for x in X:
-            pre_results.append(test_one_batch(x))
+            pre_results.append(test_one_user(x))
         scale = float(batch_size/len(users))
         for result in pre_results:
             results['recall'] += result['recall']
