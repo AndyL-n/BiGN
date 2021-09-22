@@ -13,7 +13,9 @@ import torch.optim as optim
 def test_one_user(X):
     sorted_items = X[0].numpy()
     groundTrue = X[1]
+    # 0/1 序列
     r = getLabel(groundTrue, sorted_items)
+
     pre, recall, ndcg = [], [], []
     for k in eval(args.topks):
         ret = RecallPrecision_ATk(groundTrue, r, k)
