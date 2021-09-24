@@ -3,7 +3,7 @@ from dataloader import BasicDataset
 from torch import nn
 from parse import cprint
 from sys import exit
-
+from sparsesvd import sparsesvd
 class BasicModel(nn.Module):
     def __init__(self):
         super(BasicModel, self).__init__()
@@ -569,31 +569,32 @@ class LGCN_IDE(object):
 
     def train(self):
         adj_mat = self.adj_mat
+        print(adj_mat.shape)  # adj           [n_user, n_item]
         start = time.time()
         rowsum = np.array(adj_mat.sum(axis=1))  # Du
         d_inv = np.power(rowsum, -0.5).flatten()
         d_inv[np.isinf(d_inv)] = 0.
-        d_mat = sp.diags(d_inv)  # Du^-0.5
+        d_mat = sp.diags(d_inv)  # Du^-0.5       [n_user, n_user]
         d_mat_i = d_mat
         norm_adj = d_mat.dot(adj_mat)  # Du^-0.5 * R
 
         colsum = np.array(adj_mat.sum(axis=0))  # Di
         d_inv = np.power(colsum, -0.5).flatten()
         d_inv[np.isinf(d_inv)] = 0.
-        d_mat = sp.diags(d_inv)  # Di^-0.5
+        d_mat = sp.diags(d_inv)  # Di^-0.5       [n_item, n_item]
         d_mat_u = d_mat
         d_mat_u_inv = sp.diags(1 / d_inv)
         norm_adj = norm_adj.dot(d_mat)  # Du^-0.5 * R * Di^-0.5
-        self.norm_adj = norm_adj.tocsr()
+        self.norm_adj = norm_adj.tocsr()  # [n_user * n_item]
         end = time.time()
         print('training time for LGCN-IDE', end - start)
 
     def getUsersRating(self, batch_users, ds_name):
         norm_adj = self.norm_adj
         batch_test = np.array(norm_adj[batch_users, :].todense())
-        U_1 = batch_test @ norm_adj.T @ norm_adj
+        U_1 = batch_test @ norm_adj.T @ norm_adj  # [batch, n_item] * [n_item, n_user] * [n_user, n_item] = [batch, n_item]
         if (ds_name == 'gowalla'):
-            U_2 = U_1 @ norm_adj.T @ norm_adj
+            U_2 = U_1 @ norm_adj.T @ norm_adj  # [batch, n_item] * [n_item, n_user] * [n_user, n_item] = [batch, n_item]
             return U_2
         else:
             return U_1
@@ -604,23 +605,25 @@ class GF_CF(object):
         self.adj_mat = adj_mat
 
     def train(self):
-        adj_mat = self.adj_mat  # adj
+        print("train...")
+        adj_mat = self.adj_mat  # adj           [n_user, n_item]
         start = time.time()
-        rowsum = np.array(adj_mat.sum(axis=1))  # Ru
+        rowsum = np.array(adj_mat.sum(axis=1))  # Du
         d_inv = np.power(rowsum, -0.5).flatten()
         d_inv[np.isinf(d_inv)] = 0.
-        d_mat = sp.diags(d_inv)
-        norm_adj = d_mat.dot(adj_mat)
+        d_mat = sp.diags(d_inv)  # Du^-0.5       [n_user, n_user]
+        norm_adj = d_mat.dot(adj_mat)  # Du ^ -0.5 * R
 
-        colsum = np.array(adj_mat.sum(axis=0))
+        colsum = np.array(adj_mat.sum(axis=0))  # Di
         d_inv = np.power(colsum, -0.5).flatten()
         d_inv[np.isinf(d_inv)] = 0.
         d_mat = sp.diags(d_inv)
-        self.d_mat_i = d_mat
-        self.d_mat_i_inv = sp.diags(1 / d_inv)
-        norm_adj = norm_adj.dot(d_mat)
+        self.d_mat_i = d_mat  # Di^-0.5       [n_item, n_item]
+        self.d_mat_i_inv = sp.diags(1 / d_inv)  # Di^0.5        [n_item, n_item]
+        norm_adj = norm_adj.dot(d_mat)  # Du ^ -0.5 * R * Di ^ -0.5
         self.norm_adj = norm_adj.tocsc()
-        ut, s, self.vt = sparsesvd(self.norm_adj, 256)
+        ut, s, self.vt = sparsesvd(self.norm_adj, 256)  # 奇异值分解
+        # [k, n_user] * [k, k] * [k, n_item]
         end = time.time()
         print('training time for GF-CF', end - start)
 
@@ -633,6 +636,7 @@ class GF_CF(object):
             ret = U_2
         else:
             U_1 = batch_test @ self.d_mat_i @ self.vt.T @ self.vt @ self.d_mat_i_inv
+            # [batch, n_item] * [n_item, n_item] * [n_item, k] * [k, n_item] * [n_item, n_item] = [batch, n_item]
             ret = U_2 + 0.3 * U_1
         return ret
 
