@@ -12,56 +12,10 @@ from sys import exit
 from sklearn.metrics import pairwise_distances
 from scipy.spatial.distance import cosine
 pd.set_option('display.max_rows',None)
-class BasicDataset(Dataset):
-    def __init__(self):
-        print("init dataset")
-    
-    @property
-    def n_users(self):
-        raise NotImplementedError
-    
-    @property
-    def m_items(self):
-        raise NotImplementedError
-    
-    @property
-    def trainDataSize(self):
-        raise NotImplementedError
-    
-    @property
-    def testDict(self):
-        raise NotImplementedError
-    
-    @property
-    def allPos(self):
-        raise NotImplementedError
-    
-    def getUserItemFeedback(self, users, items):
-        raise NotImplementedError
-    
-    def getUserPosItems(self, users):
-        raise NotImplementedError
-    
-    def getUserNegItems(self, users):
-        """
-        not necessary for large dataset
-        it's stupid to return all neg items in super large dataset
-        """
-        raise NotImplementedError
-    
-    def getSparseGraph(self):
-        """
-        build a graph in torch.sparse.IntTensor.
-        Details in NGCF's matrix form
-        A = 
-            |I,   R|
-            |R^T, I|
-        """
-        raise NotImplementedError
 
-class Loader(BasicDataset):
+class Loader(Dataset):
     """
-    Dataset type for pytorch \n
+    Dataset type for pytorch
     Incldue graph information
     gowalla dataset
     """
@@ -69,17 +23,22 @@ class Loader(BasicDataset):
     def __init__(self, path="Data/gowalla"):
         # train or test
         cprint(f'loading [{path}]')
+        self.path = path
+        train_file = path + '/train.txt'
+        test_file = path + '/test.txt'
+
         self.split = args.split
         self.folds = args.a_fold
         self.mode_dict = {'train': 0, "test": 1}
+
+        # get number of users and items
         self.mode = self.mode_dict['train']
-        self.n_user = 0
-        self.m_item = 0
-        train_file = path + '/train.txt'
-        test_file = path + '/test.txt'
-        self.path = path
-        trainUniqueUsers, trainItem, trainUser = [], [], []
-        testUniqueUsers, testItem, testUser = [], [], []
+        self.n_user, self.n_item = 0, 0
+        self.n_train, self.n_test = 0, 0
+
+
+        train_unique_users, train_user, train_item = [], [], []
+        test_unique_users, test_user, test_item = [], [], []
         self.traindataSize = 0
         self.testDataSize = 0
 
@@ -89,15 +48,16 @@ class Loader(BasicDataset):
                     l = l.strip('\n').split(' ')
                     items = [int(i) for i in l[1:]]
                     uid = int(l[0])
-                    trainUniqueUsers.append(uid)
-                    trainUser.extend([uid] * len(items))
-                    trainItem.extend(items)
-                    self.m_item = max(self.m_item, max(items))
+                    train_unique_users.append(uid)
+                    train_user.extend([uid] * len(items))
+                    train_item.extend(items)
+                    self.n_item = max(self.n_item, max(items))
                     self.n_user = max(self.n_user, uid)
-                    self.traindataSize += len(items)
-        self.trainUniqueUsers = np.array(trainUniqueUsers)
-        self.trainUser = np.array(trainUser)
-        self.trainItem = np.array(trainItem)
+                    self.n_train += len(items)
+
+        self.train_unique_users = np.array(train_unique_users)
+        self.train_user = np.array(train_user)
+        self.train_item = np.array(train_item)
 
         with open(test_file) as f:
             for l in f.readlines():
@@ -105,17 +65,19 @@ class Loader(BasicDataset):
                     l = l.strip('\n').split(' ')
                     items = [int(i) for i in l[1:]]
                     uid = int(l[0])
-                    testUniqueUsers.append(uid)
-                    testUser.extend([uid] * len(items))
-                    testItem.extend(items)
-                    self.m_item = max(self.m_item, max(items))
+                    test_unique_users.append(uid)
+                    test_user.extend([uid] * len(items))
+                    test_item.extend(items)
+                    self.n_item = max(self.n_item, max(items))
                     self.n_user = max(self.n_user, uid)
-                    self.testDataSize += len(items)
-        self.m_item += 1
+                    self.n_test += len(items)
+
+        self.test_unique_users = np.array(test_unique_users)
+        self.test_user = np.array(test_user)
+        self.test_item = np.array(test_item)
+
+        self.n_item += 1
         self.n_user += 1
-        self.testUniqueUsers = np.array(testUniqueUsers)
-        self.testUser = np.array(testUser)
-        self.testItem = np.array(testItem)
         
         self.Graph = None
         self.LGraph = None
@@ -123,72 +85,57 @@ class Loader(BasicDataset):
         self.similarity = None
 
         print(f"{self.n_user} users")
-        print(f"{self.m_item} items")
-        print(f"{self.trainDataSize} interactions for training")
-        print(f"{self.testDataSize} interactions for testing")
-        print(f"{args.dataset} Sparsity : {(self.trainDataSize + self.testDataSize) / self.n_users / self.m_items}")
+        print(f"{self.n_item} items")
+        print(f"{self.n_train} interactions for training")
+        print(f"{self.n_test} interactions for testing")
+        print(f"{self.path} Sparsity : {(self.n_train + self.n_test) / self.n_user / self.n_item}")
 
-        # (users,items), bipartite graph
-        self.UserItemNet = csr_matrix((np.ones(len(self.trainUser)), (self.trainUser, self.trainItem)), shape=(self.n_user, self.m_item))
+        # [n_user, n_item], bipartite graph
+        self.R = csr_matrix((np.ones(len(self.train_user)), (self.train_user, self.train_item)), shape=(self.n_user, self.n_item))
         try:
             self.adj_mat = sp.load_npz(self.path + '/adj_mat.npz')
             print("successfully loaded adjacency matrix...")
         except:
-            self.adj_mat = sp.dok_matrix((self.n_users + self.m_items, self.n_users + self.m_items), dtype=np.float32)
+            self.adj_mat = sp.dok_matrix((self.n_user + self.n_item, self.n_user + self.n_item), dtype=np.float32)
             self.adj_mat = self.adj_mat.tolil()
-            R = self.UserItemNet.tolil()
+            R = self.R.tolil()
             # prevent memory from overflowing
             for i in tqdm(range(5)):
-                self.adj_mat[int(self.n_users * i / 5.0):int(self.n_users * (i + 1.0) / 5), self.n_users:] = \
-                    R[int(self.n_users * i / 5.0):int(self.n_users * (i + 1.0) / 5)]
-                self.adj_mat[self.n_users:, int(self.n_users * i / 5.0):int(self.n_users * (i + 1.0) / 5)] = \
-                    R[int(self.n_users * i / 5.0):int(self.n_users * (i + 1.0) / 5)].T
+                self.adj_mat[int(self.n_user * i / 5.0):int(self.n_user * (i + 1.0) / 5), self.n_user:] = \
+                    R[int(self.n_user * i / 5.0):int(self.n_user * (i + 1.0) / 5)]
+                self.adj_mat[self.n_user:, int(self.n_user * i / 5.0):int(self.n_user * (i + 1.0) / 5)] = \
+                    R[int(self.n_user * i / 5.0):int(self.n_user * (i + 1.0) / 5)].T
             self.adj_mat = self.adj_mat.tocsr()
             print('already create adjacency matrix', self.adj_mat.shape)
             sp.save_npz(self.path + '/adj_mat.npz', self.adj_mat)
 
-        self.users_D = np.array(self.UserItemNet.sum(axis=1)).squeeze()
-        self.users_D[self.users_D == 0.] = 1
-        self.items_D = np.array(self.UserItemNet.sum(axis=0)).squeeze()
+        # degree
+        self.users_D = np.array(self.R.sum(axis=1)).squeeze()
+        self.items_D = np.array(self.R.sum(axis=0)).squeeze()
+
+        # A + I
+        self.users_D[self.users_D == 0.] = 1.
         self.items_D[self.items_D == 0.] = 1.
+
         # pre-calculate
-        self._allPos = self.getUserPosItems(list(range(self.n_user)))
-        self.__testDict = self.__build_test()
+        self.all_pos = self.get_user_pos(list(range(self.n_user)))
+        self.test_dict = self.build_test()
+
         print(f"{args.dataset} is ready to go")
 
-    @property
-    def n_users(self):
-        return self.n_user
-    
-    @property
-    def m_items(self):
-        return self.m_item
-    
-    @property
-    def trainDataSize(self):
-        return self.traindataSize
-    
-    @property
-    def testDict(self):
-        return self.__testDict
-
-    @property
-    def allPos(self):
-        return self._allPos
-
-    def _split_A_hat(self,A):
+    def split_A_hat(self,A):
         A_fold = []
-        fold_len = (self.n_users + self.m_items) // self.folds
+        fold_len = (self.n_user + self.n_item) // self.folds
         for i_fold in range(self.folds):
             start = i_fold*fold_len
             if i_fold == self.folds - 1:
-                end = self.n_users + self.m_items
+                end = self.n_user + self.m_items
             else:
                 end = (i_fold + 1) * fold_len
-            A_fold.append(self._convert_sp_mat_to_sp_tensor(A[start:end]).coalesce().to(args.device))
+            A_fold.append(self.convert_sp_mat_to_sp_tensor(A[start:end]).coalesce().to(args.device))
         return A_fold
 
-    def _convert_sp_mat_to_sp_tensor(self, X):
+    def convert_sp_mat_to_sp_tensor(self, X):
         coo = X.tocoo().astype(np.float32)
         row = torch.Tensor(coo.row).long()
         col = torch.Tensor(coo.col).long()
@@ -197,8 +144,7 @@ class Loader(BasicDataset):
         return torch.sparse.FloatTensor(index, data, torch.Size(coo.shape))
         
     def getSparseGraph(self):
-        # L = D^-0.5 * A * D^-0.5
-        # L = D^-0.5 * (A + I) * D^-0.5
+
         print("loading symmetric norm adjacency matrix")
         if self.Graph is None:
             try:
@@ -210,8 +156,9 @@ class Loader(BasicDataset):
                 s = time()
 
                 adj_mat = self.adj_mat.todok()
+                # L = D^-0.5 * (A + I) * D^-0.5
                 # adj_mat = adj_mat + sp.eye(adj_mat.shape[0])
-                
+                # L = D^-0.5 * A * D^-0.5
                 rowsum = np.array(adj_mat.sum(axis=1))
                 d_inv = np.power(rowsum, -0.5).flatten()
                 d_inv[np.isinf(d_inv)] = 0.
@@ -228,10 +175,11 @@ class Loader(BasicDataset):
                 self.Graph = self._split_A_hat(norm_adj)
                 print("done split matrix")
             else:
-                self.Graph = self._convert_sp_mat_to_sp_tensor(norm_adj)
+                self.Graph = self.convert_sp_mat_to_sp_tensor(norm_adj)
                 self.Graph = self.Graph.coalesce().to(args.device)
                 print("don't split the matrix")
         return self.Graph
+
 
     def getSparseLGraph(self):
         # L = D^-1 * A
@@ -264,7 +212,7 @@ class Loader(BasicDataset):
                 self.LGraph = self._split_A_hat(norm_adj)
                 print("done split matrix")
             else:
-                self.LGraph = self._convert_sp_mat_to_sp_tensor(norm_adj)
+                self.LGraph = self.convert_sp_mat_to_sp_tensor(norm_adj)
                 self.LGraph = self.LGraph.coalesce().to(args.device)
                 print("don't split the matrix")
         return self.LGraph
@@ -299,7 +247,7 @@ class Loader(BasicDataset):
                 self.RGraph = self._split_A_hat(norm_adj)
                 print("done split matrix")
             else:
-                self.RGraph = self._convert_sp_mat_to_sp_tensor(norm_adj)
+                self.RGraph = self.convert_sp_mat_to_sp_tensor(norm_adj)
                 self.RGraph = self.RGraph.coalesce().to(args.device)
                 print("don't split the matrix")
         return self.RGraph
@@ -411,15 +359,15 @@ class Loader(BasicDataset):
                 except:
                     print("generating similarity matrix")
                     s = time()
-                    similarity = sp.dok_matrix((self.n_users + self.m_items, self.n_users + self.m_items), dtype=np.float32)
+                    similarity = sp.dok_matrix((self.n_user + self.m_items, self.n_user + self.m_items), dtype=np.float32)
                     similarity = similarity.tolil()
                     R = self.UserItemNet.tolil()
                     print("generating user similarity")
                     dist_out = 1 - pairwise_distances(R, metric="cosine")
-                    similarity[:self.n_users, :self.n_users] = dist_out
+                    similarity[:self.n_user, :self.n_user] = dist_out
                     print("generating item similarity")
                     dist_out = 1 - pairwise_distances(R.T, metric="cosine")
-                    similarity[self.n_users:, self.n_users:] = dist_out
+                    similarity[self.n_user:, self.n_user:] = dist_out
                     similarity = similarity.tocsr()
                     end = time()
                     print(f"costing {end - s}s, saved similarity_mat...")
@@ -435,16 +383,16 @@ class Loader(BasicDataset):
                     except:
                         print("generating similarity matrix")
                         s = time()
-                        similarity = sp.dok_matrix((self.n_users + self.m_items, self.n_users + self.m_items),
+                        similarity = sp.dok_matrix((self.n_user + self.m_items, self.n_user + self.m_items),
                                                    dtype=np.float32)
                         similarity = similarity.tolil()
                         R = self.UserItemNet.tolil()
                         print("generating user similarity")
                         dist_out = 1 - pairwise_distances(R, metric="cosine")
-                        similarity[:self.n_users, :self.n_users] = dist_out
+                        similarity[:self.n_user, :self.n_user] = dist_out
                         print("generating item similarity")
                         dist_out = 1 - pairwise_distances(R.T, metric="cosine")
-                        similarity[self.n_users:, self.n_users:] = dist_out
+                        similarity[self.n_user:, self.n_user:] = dist_out
                         similarity = similarity.tocsr()
                         end = time()
                         print(f"costing {end - s}s, saved similarity_mat...")
@@ -472,19 +420,19 @@ class Loader(BasicDataset):
                 self.similarity = self._split_A_hat(similarity)
                 print("done split matrix")
             else:
-                self.similarity = self._convert_sp_mat_to_sp_tensor(similarity)
+                self.similarity = self.convert_sp_mat_to_sp_tensor(similarity)
                 self.similarity = self.similarity.coalesce().to(args.device)
                 print("don't split the matrix")
         return self.similarity
 
-    def __build_test(self):
+    def build_test(self):
         """
         return:
             dict: {user: [items]}
         """
         test_data = {}
-        for i, item in enumerate(self.testItem):
-            user = self.testUser[i]
+        for i, item in enumerate(self.test_item):
+            user = self.test_user[i]
             if test_data.get(user):
                 test_data[user].append(item)
             else:
@@ -503,11 +451,11 @@ class Loader(BasicDataset):
         # print(self.UserItemNet[users, items])
         return np.array(self.UserItemNet[users, items]).astype('uint8').reshape((-1,))
 
-    def getUserPosItems(self, users):
-        posItems = []
+    def get_user_pos(self, users):
+        pos_items = []
         for user in users:
-            posItems.append(self.UserItemNet[user].nonzero()[1])
-        return posItems
+            pos_items.append(self.R[user].nonzero()[1])
+        return pos_items
 
     def getUserNegItems(self, users):
         negItems = []
@@ -516,6 +464,7 @@ class Loader(BasicDataset):
         return negItems
 
 dataset = Loader(path="Data/"+args.dataset)
+print(dataset.n_user)
 # dataset.getSparseLGraph()
 # dataset.getSparseRGraph()
-print(dataset.allPos[0])
+print(dataset.all_pos[0])
