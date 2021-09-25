@@ -149,7 +149,8 @@ class Data(object):
         mean_adj_mat = normalized_adj_single(adj_mat)
 
         print('already normalize adjacency matrix', time() - t2)
-        return adj_mat.tocsr(), norm_adj_mat.tocsr(), mean_adj_mat.tocsr()
+        return adj_mat.tocsr(),
+        .tocsr(), mean_adj_mat.tocsr()
 
     def negative_pool(self):
         t1 = time()

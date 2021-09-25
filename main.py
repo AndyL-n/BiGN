@@ -106,6 +106,7 @@ if __name__ == '__main__':
     results = []
     result = Test(dataset, model)
     precision, recall, ndcg = [result[x] for x in result]
+    if args.model
     print(precision, recall, ndcg)
     results.append([0, 0, 0, 0, recall, ndcg, precision])
     timestamp = strftime('%Y-%m-%d', localtime(time()))

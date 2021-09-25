@@ -129,7 +129,7 @@ class Loader(Dataset):
         for i_fold in range(self.folds):
             start = i_fold*fold_len
             if i_fold == self.folds - 1:
-                end = self.n_user + self.m_items
+                end = self.n_user + self.n_item
             else:
                 end = (i_fold + 1) * fold_len
             A_fold.append(self.convert_sp_mat_to_sp_tensor(A[start:end]).coalesce().to(args.device))
@@ -359,9 +359,9 @@ class Loader(Dataset):
                 except:
                     print("generating similarity matrix")
                     s = time()
-                    similarity = sp.dok_matrix((self.n_user + self.m_items, self.n_user + self.m_items), dtype=np.float32)
+                    similarity = sp.dok_matrix((self.n_user + self.n_item, self.n_user + self.n_item), dtype=np.float32)
                     similarity = similarity.tolil()
-                    R = self.UserItemNet.tolil()
+                    R = self.R.tolil()
                     print("generating user similarity")
                     dist_out = 1 - pairwise_distances(R, metric="cosine")
                     similarity[:self.n_user, :self.n_user] = dist_out
@@ -383,10 +383,9 @@ class Loader(Dataset):
                     except:
                         print("generating similarity matrix")
                         s = time()
-                        similarity = sp.dok_matrix((self.n_user + self.m_items, self.n_user + self.m_items),
-                                                   dtype=np.float32)
+                        similarity = sp.dok_matrix((self.n_user + self.n_item, self.n_user + self.n_item), dtype=np.float32)
                         similarity = similarity.tolil()
-                        R = self.UserItemNet.tolil()
+                        R = self.R.tolil()
                         print("generating user similarity")
                         dist_out = 1 - pairwise_distances(R, metric="cosine")
                         similarity[:self.n_user, :self.n_user] = dist_out
@@ -465,6 +464,6 @@ class Loader(Dataset):
 
 dataset = Loader(path="Data/"+args.dataset)
 print(dataset.n_user)
-# dataset.getSparseLGraph()
+dataset.getSparseGraph()
 # dataset.getSparseRGraph()
 print(dataset.all_pos[0])
