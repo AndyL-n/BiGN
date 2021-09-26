@@ -28,7 +28,7 @@ def test_one_user(X):
 
 def Test(dataset, model):
     batch_size = args.test_batch
-    testDict: dict = dataset.testDict
+    testDict: dict = dataset.test_dict
     model: model.LightGCN
     # eval mode with no dropout
     model = model.eval()
@@ -51,14 +51,14 @@ def Test(dataset, model):
         total_batch = (len(users) - 1) // batch_size + 1
         for batch_users in minibatch(users, batch_size=batch_size):
             # train 数据
-            allPos = dataset.getUserPosItems(batch_users)
+            allPos = dataset.get_user_pos(batch_users)
             # test 数据
             groundTrue = [testDict[u] for u in batch_users]
             # batch内的user [batch * 1]
             batch_users_gpu = t.Tensor(batch_users).long()
             batch_users_gpu = batch_users_gpu.to(args.device)
             # batch所有的评分[batch * n_items]
-            rating = model.getUsersRating(batch_users_gpu)
+            rating = model.get_users_rating(batch_users_gpu)
             #rating = rating.cpu()
             exclude_index = []
             exclude_items = []
@@ -106,48 +106,51 @@ if __name__ == '__main__':
     results = []
     result = Test(dataset, model)
     precision, recall, ndcg = [result[x] for x in result]
-    if args.model
     print(precision, recall, ndcg)
-    results.append([0, 0, 0, 0, recall, ndcg, precision])
-    timestamp = strftime('%Y-%m-%d', localtime(time()))
+    if args.model_name == 'NGCF':
+        print("NGCF")
+    else:
+        results.append([0, 0, 0, 0, recall, ndcg, precision])
+        timestamp = strftime('%Y-%m-%d', localtime(time()))
 
-    print('start training...')
+        print('start training...')
 
-    total_batch = (dataset.traindataSize - 1) // args.train_batch + 1
-    print(f"Train on {dataset.traindataSize} samples,  {total_batch} steps per epoch")
+        total_batch = (dataset.n_train - 1) // args.train_batch + 1
+        print(f"Train on {dataset.n_train} samples,  {total_batch} steps per epoch")
 
-    for epoch in range(args.epochs):
-        t1 = time()
-        S = sample(dataset)
-        users = t.Tensor(S[:, 0]).long()
-        posItems = t.Tensor(S[:, 1]).long()
-        negItems = t.Tensor(S[:, 2]).long()
+        for epoch in range(args.epochs):
+            t1 = time()
+            S = sample(dataset)
+            users = t.Tensor(S[:, 0]).long()
+            posItems = t.Tensor(S[:, 1]).long()
+            negItems = t.Tensor(S[:, 2]).long()
 
-        users = users.to(args.device)
-        posItems = posItems.to(args.device)
-        negItems = negItems.to(args.device)
-        users, posItems, negItems = shuffle(users, posItems, negItems)
+            users = users.to(args.device)
+            posItems = posItems.to(args.device)
+            negItems = negItems.to(args.device)
+            users, posItems, negItems = shuffle(users, posItems, negItems)
 
-        aver_loss = 0.
-        for (batch_i, (batch_users, batch_pos, batch_neg)) in enumerate(
-                minibatch(users, posItems, negItems, batch_size=args.train_batch)):
-            loss, reg_loss = model.bpr_loss(batch_users, batch_pos, batch_neg)
-            reg_loss = reg_loss * args.decay
-            loss = loss + reg_loss
+            aver_loss = 0.
+            for (batch_i, (batch_users, batch_pos, batch_neg)) in enumerate(
+                    minibatch(users, posItems, negItems, batch_size=args.train_batch)):
+                loss, reg_loss = model.bpr_loss(batch_users, batch_pos, batch_neg)
+                reg_loss = reg_loss * args.decay
+                loss = loss + reg_loss
 
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            # print(batch_i, loss)
-            aver_loss += loss.cpu().item()
-        aver_loss = aver_loss / total_batch
-        print(f'EPOCH[{epoch + 1}/{args.epochs}] loss{aver_loss:.10f}')
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+                # print(batch_i, loss)
+                aver_loss += loss.cpu().item()
+            aver_loss = aver_loss / total_batch
+            print(f'EPOCH[{epoch + 1}/{args.epochs}] loss{aver_loss:.10f}')
 
-        t2 = time()
-        result = Test(dataset, model)
-        precision, recall, ndcg = [result[x] for x in result]
-        print(precision, recall, ndcg)
-        results.append([epoch + 1, t2-t1, aver_loss, time()-t2, recall, ndcg, precision])
-        pd.DataFrame(results, columns=['Iteration', 'fit_time', 'loss', 'evaluate_time', 'recall', 'ndcg', 'precision'])\
-            .to_csv('log/{}_{}_layer{}_dim{}_batch{}_K{}_lr{}_{}.csv'
-                    .format(args.model_name, args.dataset, args.layer, args.embed_size, args.train_batch, args.topks, args.lr, timestamp), index=False)
+            t2 = time()
+            result = Test(dataset, model)
+            precision, recall, ndcg = [result[x] for x in result]
+            print(precision, recall, ndcg)
+            results.append([epoch + 1, t2-t1, aver_loss, time()-t2, recall, ndcg, precision])
+            pd.DataFrame(results, columns=['Iteration', 'fit_time', 'loss', 'evaluate_time', 'recall', 'ndcg', 'precision'])\
+                .to_csv('log/{}_{}_layer{}_dim{}_batch{}_K{}_lr{}_{}.csv'
+                        .format(args.model_name, args.dataset, args.layer, args.embed_size, args.train_batch, args.topks, args.lr, timestamp), index=False)
+

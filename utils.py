@@ -27,9 +27,9 @@ class BPRLoss:
         return loss.cpu().item()
 
 def sample(dataset):
-    user_num = dataset.trainDataSize
-    users = np.random.randint(0, dataset.n_users, user_num)
-    allPos = dataset.allPos
+    user_num = dataset.n_train
+    users = np.random.randint(0, dataset.n_user, user_num)
+    allPos = dataset.all_pos
     S = []
     for i, user in enumerate(users):
         posForUser = allPos[user]
@@ -38,7 +38,7 @@ def sample(dataset):
         posindex = np.random.randint(0, len(posForUser))
         positem = posForUser[posindex]
         while True:
-            negitem = np.random.randint(0, dataset.m_items)
+            negitem = np.random.randint(0, dataset.n_item)
             if negitem in posForUser:
                 continue
             else:

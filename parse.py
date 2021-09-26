@@ -7,7 +7,7 @@ import torch as t
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run BiGN.")
-    parser.add_argument('--model_name', type=str, default='BPRMF',
+    parser.add_argument('--model_name', type=str, default='NGCF',
                         help="The name of model. support [BiGN, LightGCN, DGCN_HN, GCN, GCMC, NGCF, NCF, TT, BPRMF]")
     parser.add_argument('--train_batch', type=int,default=2048,
                         help="The batch size for bpr loss training procedure.")
@@ -26,7 +26,7 @@ def parse_args():
     parser.add_argument('--dropout', type=int,default=0,
                         help="Using the dropout or not.")
     parser.add_argument('--keep_prob', type=float,default=0.6,
-                        help="The batch size for bpr loss training procedure.")
+                        help="Keep probability w.r.t. node dropout (i.e., 1-dropout_ratio) for each deep layer. 1: no dropout.")
     parser.add_argument('--split', type=bool, default=False,
                         help="Using the split or not.")
     parser.add_argument('--a_fold', type=int,default=100,

@@ -438,17 +438,17 @@ class Loader(Dataset):
                 test_data[user] = [item]
         return test_data
 
-    def getUserItemFeedback(self, users, items):
-        """
-        users:
-            shape [-1]
-        items:
-            shape [-1]
-        return:
-            feedback [-1]
-        """
-        # print(self.UserItemNet[users, items])
-        return np.array(self.UserItemNet[users, items]).astype('uint8').reshape((-1,))
+    # def getUserItemFeedback(self, users, items):
+    #     """
+    #     users:
+    #         shape [-1]
+    #     items:
+    #         shape [-1]
+    #     return:
+    #         feedback [-1]
+    #     """
+    #     # print(self.UserItemNet[users, items])
+    #     return np.array(self.UserItemNet[users, items]).astype('uint8').reshape((-1,))
 
     def get_user_pos(self, users):
         pos_items = []
@@ -456,14 +456,14 @@ class Loader(Dataset):
             pos_items.append(self.R[user].nonzero()[1])
         return pos_items
 
-    def getUserNegItems(self, users):
-        negItems = []
-        for user in users:
-            negItems.append(self.allNeg[user])
-        return negItems
+    # def getUserNegItems(self, users):
+    #     negItems = []
+    #     for user in users:
+    #         negItems.append(self.allNeg[user])
+    #     return negItems
 
-dataset = Loader(path="Data/"+args.dataset)
-print(dataset.n_user)
-dataset.getSparseGraph()
-# dataset.getSparseRGraph()
-print(dataset.all_pos[0])
+# dataset = Loader(path="Data/"+args.dataset)
+# print(dataset.n_user)
+# dataset.getSparseGraph()
+# # dataset.getSparseRGraph()
+# print(dataset.all_pos[0])
