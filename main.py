@@ -31,7 +31,10 @@ def Test(dataset, model):
     testDict: dict = dataset.test_dict
     model: model.LightGCN
     # eval mode with no dropout
-    model = model.eval()
+    if args.model_name == 'GF_CF' or args.model_name == 'LGCN_IDE':
+        model.train()
+    else:
+        model = model.eval()
     topks = eval(args.topks)
     max_K = max(topks)
     results = {'precision': np.zeros(len(topks)),
@@ -98,18 +101,22 @@ def Test(dataset, model):
         return results
 
 if __name__ == '__main__':
-    print(">>SEED:", args.seed)
-    set_seed(args.seed)
-    model = MODELS[args.model_name](args, dataset)
-    model = model.to(args.device)
-    optimizer = optim.Adam(model.parameters(), lr=args.lr)
-    results = []
-    result = Test(dataset, model)
-    precision, recall, ndcg = [result[x] for x in result]
-    print(precision, recall, ndcg)
-    if args.model_name == 'NGCF':
-        print("NGCF")
+    if args.model_name == 'GF_CF' or args.model_name == 'LGCN_IDE':
+        model = MODELS[args.model_name](args, dataset)
+        result = Test(dataset, model)
+        precision, recall, ndcg = [result[x] for x in result]
+        print(precision, recall, ndcg)
+        print(args.model_name)
     else:
+        print(">>SEED:", args.seed)
+        set_seed(args.seed)
+        model = MODELS[args.model_name](args, dataset)
+        model = model.to(args.device)
+        optimizer = optim.Adam(model.parameters(), lr=args.lr)
+        results = []
+        result = Test(dataset, model)
+        precision, recall, ndcg = [result[x] for x in result]
+        print(precision, recall, ndcg)
         results.append([0, 0, 0, 0, recall, ndcg, precision])
         timestamp = strftime('%Y-%m-%d', localtime(time()))
 

@@ -1,14 +1,19 @@
 import torch as t
 import torch as torch
+import torch.nn.functional as F
 from torch import nn
 from parse import cprint
 from sys import exit
 from sparsesvd import sparsesvd
+import time
+import numpy as np
+import scipy.sparse as sp
+
 class BasicModel(nn.Module):
     def __init__(self):
         super(BasicModel, self).__init__()
 
-    def getUsersRating(self, users):
+    def get_users_rating(self, users):
         raise NotImplementedError
 
 class PairWiseModel(BasicModel):
@@ -170,7 +175,9 @@ class NGCF(BasicModel):
         self.embed_size = self.args.embed_size
         self.layer = self.args.layer
         self.layer_size = eval(self.args.layer_size)
-        self.
+        self.mess_dropout = eval(self.args.mess_dropout)
+        print(self.mess_dropout)
+        self.split = self.args.split
         self.embedding_user = t.nn.Embedding(num_embeddings=self.n_user, embedding_dim=self.embed_size)
         self.embedding_item = t.nn.Embedding(num_embeddings=self.n_item, embedding_dim=self.embed_size)
 
@@ -197,22 +204,126 @@ class NGCF(BasicModel):
 
         self.weight_dict = weight_dict
 
+
+        self.f = nn.Sigmoid()
         self.Graph = self.dataset.getSparseGraph()
         print(f"{self.args.model_name} is already to go(dropout:{self.args.dropout})")
 
+    def __dropout_x(self, x, keep_prob):
+        size = x.size()
+        index = x.indices().t()
+        values = x.values()
+        random_index = t.rand(len(values)) + keep_prob
+        random_index = random_index.int().bool()
+        index = index[random_index]
+        values = values[random_index] / keep_prob
+        g = t.sparse.FloatTensor(index.t(), values, size)
+        return g
+
+    def __dropout(self, keep_prob):
+        if self.A_split:
+            graph = []
+            for g in self.Graph:
+                graph.append(self.__dropout_x(g, keep_prob))
+        else:
+            graph = self.__dropout_x(self.Graph, keep_prob)
+        return graph
+
     def computer(self):
-        if self.args.dropout:
-            a_hat =
-
-        user_emb = self.embedding_user.weight
-        item_emb = self.embedding_item.weight
-
+        """
+        propagate methods for NGCF
+        """
+        users_emb = self.embedding_user.weight
+        items_emb = self.embedding_item.weight
         all_emb = t.cat([users_emb, items_emb])
         #   t.split(all_emb , [self.num_users, self.num_items])
         embs = [all_emb]
 
-            ego_embeddings = torch.cat([self.embedding_dict['user_emb'],
-                                        self.embedding_dict['item_emb']], 0)
+        if self.args.dropout:
+            if self.training:
+                print("droping")
+                g_droped = self.__dropout(self.args.keep_prob)
+            else:
+                g_droped = self.Graph
+        else:
+            g_droped = self.Graph
+
+        for layer in range(self.layer):
+            if self.split:
+                temp_emb = []
+                for f in range(len(g_droped)):
+                    temp_emb.append(t.sparse.mm(g_droped[f], all_emb))
+                side_emb = t.cat(temp_emb, dim=0)
+            else:
+                side_emb = t.sparse.mm(g_droped, all_emb)
+
+            # transformed sum messages of neighbors.
+            sum_emb = torch.matmul(side_emb, self.weight_dict['W_gc_%d' % layer]) + self.weight_dict['b_gc_%d' % layer]
+
+            # bi messages of neighbors.
+            # element-wise product
+            bi_emb = torch.mul(all_emb, side_emb)
+
+            # transformed bi messages of neighbors.
+            bi_emb = torch.matmul(bi_emb, self.weight_dict['W_bi_%d' % layer]) + self.weight_dict['b_bi_%d' % layer]
+
+            # non-linear activation.
+            all_emb = nn.LeakyReLU(negative_slope=0.2)(sum_emb + bi_emb)
+
+            # message dropout.
+            all_emb = nn.Dropout(self.mess_dropout[layer])(all_emb)
+
+            # normalize the distribution of embeddings.
+            norm_emb = F.normalize(all_emb, p=2, dim=1)
+
+            # all_emb = side_emb + all_emb if self.args.residual else side_emb
+            embs.append(norm_emb)
+        embs = t.stack(embs, dim=1)
+        # print(embs.size())
+        light_out = t.mean(embs, dim=1)
+        users, items = t.split(light_out, [self.n_user, self.n_item])
+        return users, items
+
+    def get_users_rating(self, users):
+        all_users, all_items = self.computer()
+        users_emb = all_users[users.long()]
+        items_emb = all_items
+        rating = self.f(t.matmul(users_emb, items_emb.t()))
+        return rating
+
+    def get_embedding(self, users, pos_items, neg_items):
+        all_users, all_items = self.computer()
+        users_emb = all_users[users]
+        pos_emb = all_items[pos_items]
+        neg_emb = all_items[neg_items]
+        users_emb_ego = self.embedding_user(users)
+        pos_emb_ego = self.embedding_item(pos_items)
+        neg_emb_ego = self.embedding_item(neg_items)
+        return users_emb, pos_emb, neg_emb, users_emb_ego, pos_emb_ego, neg_emb_ego
+
+    def bpr_loss(self, users, pos, neg):
+        (users_emb, pos_emb, neg_emb,
+         userEmb0, posEmb0, negEmb0) = self.get_embedding(users.long(), pos.long(), neg.long())
+        reg_loss = (1 / 2) * (userEmb0.norm(2).pow(2) +
+                              posEmb0.norm(2).pow(2) +
+                              negEmb0.norm(2).pow(2)) / float(len(users))
+        pos_scores = t.mul(users_emb, pos_emb)
+        pos_scores = t.sum(pos_scores, dim=1)
+        neg_scores = t.mul(users_emb, neg_emb)
+        neg_scores = t.sum(neg_scores, dim=1)
+
+        loss = t.mean(t.nn.functional.softplus(neg_scores - pos_scores))
+
+        return loss, reg_loss
+
+    def forward(self, users, items):
+        # compute embedding
+        all_users, all_items = self.computer()
+        users_emb = all_users[users]
+        items_emb = all_items[items]
+        scores = t.mul(users_emb, items_emb)
+        scores = t.sum(scores, dim=1)
+        return scores
 
 
 
@@ -602,12 +713,14 @@ class BPRMF(BasicModel):
 
 
 class LGCN_IDE(object):
-    def __init__(self, adj_mat):
-        self.adj_mat = adj_mat
+    def __init__(self, args, dataset):
+        super(LGCN_IDE, self).__init__()
+        self.adj_mat = dataset.R.tolil()
+        self.args = args
 
     def train(self):
         adj_mat = self.adj_mat
-        print(adj_mat.shape)  # adj           [n_user, n_item]
+        # print(adj_mat.shape)  # adj           [n_user, n_item]
         start = time.time()
         rowsum = np.array(adj_mat.sum(axis=1))  # Du
         d_inv = np.power(rowsum, -0.5).flatten()
@@ -627,23 +740,25 @@ class LGCN_IDE(object):
         end = time.time()
         print('training time for LGCN-IDE', end - start)
 
-    def getUsersRating(self, batch_users, ds_name):
+    def get_users_rating(self, batch_users):
         norm_adj = self.norm_adj
         batch_test = np.array(norm_adj[batch_users, :].todense())
         U_1 = batch_test @ norm_adj.T @ norm_adj  # [batch, n_item] * [n_item, n_user] * [n_user, n_item] = [batch, n_item]
-        if (ds_name == 'gowalla'):
+        if (self.args.dataset == 'gowalla'):
             U_2 = U_1 @ norm_adj.T @ norm_adj  # [batch, n_item] * [n_item, n_user] * [n_user, n_item] = [batch, n_item]
-            return U_2
+            return torch.from_numpy(U_2)
         else:
-            return U_1
+            return torch.from_numpy(U_1)
 
 
-class GF_CF(object):
-    def __init__(self, adj_mat):
-        self.adj_mat = adj_mat
+class GF_CF(BasicModel):
+    def __init__(self, args, dataset):
+        super(GF_CF, self).__init__()
+        self.adj_mat = dataset.R.tolil()
+        self.args = args
 
     def train(self):
-        print("train...")
+        print("train GF_CF...")
         adj_mat = self.adj_mat  # adj           [n_user, n_item]
         start = time.time()
         rowsum = np.array(adj_mat.sum(axis=1))  # Du
@@ -665,17 +780,18 @@ class GF_CF(object):
         end = time.time()
         print('training time for GF-CF', end - start)
 
-    def getUsersRating(self, batch_users, ds_name):
+    def get_users_rating(self, batch_users):
         norm_adj = self.norm_adj
         adj_mat = self.adj_mat
         batch_test = np.array(adj_mat[batch_users, :].todense())
         U_2 = batch_test @ norm_adj.T @ norm_adj
-        if (ds_name == 'amazon-book'):
+        if (self.args.dataset == 'amazon-book'):
             ret = U_2
         else:
             U_1 = batch_test @ self.d_mat_i @ self.vt.T @ self.vt @ self.d_mat_i_inv
             # [batch, n_item] * [n_item, n_item] * [n_item, k] * [k, n_item] * [n_item, n_item] = [batch, n_item]
             ret = U_2 + 0.3 * U_1
-        return ret
+
+        return torch.from_numpy(ret)
 
 
