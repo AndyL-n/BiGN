@@ -611,8 +611,6 @@ class DGCN_HN(BasicModel):
         scores = t.sum(scores, dim=1)
         return scores
 
-
-
 class GCN(BasicModel):
     def __init__(self, args, dataset):
         super(GCN, self).__init__()
@@ -649,9 +647,6 @@ class GCN(BasicModel):
         for k in range(self.layer):
             weight_dict.update({'W_gc_%d' % k: nn.Parameter(initializer(t.empty(layers[k], layers[k + 1])))})
             weight_dict.update({'b_gc_%d' % k: nn.Parameter(initializer(t.empty(1, layers[k + 1])))})
-
-            weight_dict.update({'W_bi_%d' % k: nn.Parameter(initializer(t.empty(layers[k], layers[k + 1])))})
-            weight_dict.update({'b_bi_%d' % k: nn.Parameter(initializer(t.empty(1, layers[k + 1])))})
 
         self.weight_dict = weight_dict
 
@@ -765,12 +760,159 @@ class GCN(BasicModel):
         scores = t.sum(scores, dim=1)
         return scores
 
-
 class GCMC(BasicModel):
     def __init__(self, args, dataset):
         super(GCMC, self).__init__()
         self.args = args
         self.dataset = dataset
+        self.__init_weight()
+
+    def __init_weight(self):
+        self.n_user = self.dataset.n_user
+        self.n_item = self.dataset.n_item
+        self.embed_size = self.args.embed_size
+        self.layer = self.args.layer
+        self.layer_size = eval(self.args.layer_size)
+        self.mess_dropout = eval(self.args.mess_dropout)
+        self.split = self.args.split
+
+        self.embedding_user = t.nn.Embedding(num_embeddings=self.n_user, embedding_dim=self.embed_size)
+        self.embedding_item = t.nn.Embedding(num_embeddings=self.n_item, embedding_dim=self.embed_size)
+
+        # xavier init
+        if self.args.pretrain:
+            self.embedding_user.weight.data.copy_(t.from_numpy(self.config['user_emb']))
+            self.embedding_item.weight.data.copy_(t.from_numpy(self.config['item_emb']))
+            print('use pretarined data')
+        else:
+            nn.init.xavier_uniform_(self.embedding_user.weight, gain=1)
+            nn.init.xavier_uniform_(self.embedding_item.weight, gain=1)
+            cprint('use xavier initilizer')
+
+        # weight
+        initializer = nn.init.xavier_uniform_
+        weight_dict = nn.ParameterDict()
+        layers = [self.embed_size] + self.layer_size
+        for k in range(self.layer):
+            weight_dict.update({'W_gc_%d' % k: nn.Parameter(initializer(t.empty(layers[k], layers[k + 1])))})
+            weight_dict.update({'b_gc_%d' % k: nn.Parameter(initializer(t.empty(1, layers[k + 1])))})
+
+            weight_dict.update({'W_mlp_%d' % k: nn.Parameter(initializer(t.empty(layers[k], layers[k + 1])))})
+            weight_dict.update({'b_mlp_%d' % k: nn.Parameter(initializer(t.empty(1, layers[k + 1])))})
+
+        self.weight_dict = weight_dict
+
+        self.f = nn.Sigmoid()
+        self.Graph = self.dataset.getSparseGraph()
+        print(f"{self.args.model_name} is already to go(dropout:{self.args.dropout})")
+
+    def computer(self):
+        """
+        propagate methods for GCN
+        """
+        users_emb = self.embedding_user.weight
+        items_emb = self.embedding_item.weight
+        all_emb = t.cat([users_emb, items_emb])
+        #   t.split(all_emb , [self.n_user, self.n_item])
+        embs = [all_emb]
+
+        if self.args.dropout:
+            if self.training:
+                print("droping")
+                g_droped = self.__dropout(self.args.keep_prob)
+            else:
+                g_droped = self.Graph
+        else:
+            g_droped = self.Graph
+
+        for layer in range(self.layer):
+            if self.split:
+                temp_emb = []
+                for f in range(len(g_droped)):
+                    temp_emb.append(t.sparse.mm(g_droped[f], all_emb))
+                side_emb = t.cat(temp_emb, dim=0)
+            else:
+                side_emb = t.sparse.mm(g_droped, all_emb)
+
+            # transformed sum messages of neighbors.
+            sum_emb = torch.matmul(side_emb, self.weight_dict['W_gc_%d' % layer]) + self.weight_dict['b_gc_%d' % layer]
+
+            # non-linear activation.
+            all_emb = nn.LeakyReLU(negative_slope=0.2)(sum_emb)
+
+            # message dropout.
+            all_emb = nn.Dropout(self.mess_dropout[layer])(all_emb)
+
+            # dense layer.
+            mlp_emb = torch.matmul(all_emb, self.weight_dict['W_mlp_%d' % layer]) + self.weight_dict['b_mlp_%d' % layer]
+
+            embs.append(mlp_emb)
+        embs = t.stack(embs, dim=1)
+        # print(embs.size())
+        light_out = t.mean(embs, dim=1)
+        users, items = t.split(light_out, [self.n_user, self.n_item])
+        return users, items
+
+    def __dropout_x(self, x, keep_prob):
+        size = x.size()
+        index = x.indices().t()
+        values = x.values()
+        random_index = t.rand(len(values)) + keep_prob
+        random_index = random_index.int().bool()
+        index = index[random_index]
+        values = values[random_index] / keep_prob
+        g = t.sparse.FloatTensor(index.t(), values, size)
+        return g
+
+    def __dropout(self, keep_prob):
+        if self.A_split:
+            graph = []
+            for g in self.Graph:
+                graph.append(self.__dropout_x(g, keep_prob))
+        else:
+            graph = self.__dropout_x(self.Graph, keep_prob)
+        return graph
+
+    def get_users_rating(self, users):
+        all_users, all_items = self.computer()
+        users_emb = all_users[users.long()]
+        items_emb = all_items
+        rating = self.f(t.matmul(users_emb, items_emb.t()))
+        return rating
+
+    def get_embedding(self, users, pos_items, neg_items):
+        all_users, all_items = self.computer()
+        users_emb = all_users[users]
+        pos_emb = all_items[pos_items]
+        neg_emb = all_items[neg_items]
+        users_emb_ego = self.embedding_user(users)
+        pos_emb_ego = self.embedding_item(pos_items)
+        neg_emb_ego = self.embedding_item(neg_items)
+        return users_emb, pos_emb, neg_emb, users_emb_ego, pos_emb_ego, neg_emb_ego
+
+    def bpr_loss(self, users, pos, neg):
+        (users_emb, pos_emb, neg_emb,
+         userEmb0, posEmb0, negEmb0) = self.get_embedding(users.long(), pos.long(), neg.long())
+        reg_loss = (1 / 2) * (userEmb0.norm(2).pow(2) +
+                              posEmb0.norm(2).pow(2) +
+                              negEmb0.norm(2).pow(2)) / float(len(users))
+        pos_scores = t.mul(users_emb, pos_emb)
+        pos_scores = t.sum(pos_scores, dim=1)
+        neg_scores = t.mul(users_emb, neg_emb)
+        neg_scores = t.sum(neg_scores, dim=1)
+
+        loss = t.mean(t.nn.functional.softplus(neg_scores - pos_scores))
+
+        return loss, reg_loss
+
+    def forward(self, users, items):
+        # compute embedding
+        all_users, all_items = self.computer()
+        users_emb = all_users[users]
+        items_emb = all_items[items]
+        scores = t.mul(users_emb, items_emb)
+        scores = t.sum(scores, dim=1)
+        return scores
 
 class Two_tower(BasicModel):
     def __init__(self, args, dataset):
@@ -907,7 +1049,6 @@ class GF_CF(BasicModel):
             ret = U_2 + 0.3 * U_1
 
         return torch.from_numpy(ret)
-
 
 class NeuMF(BasicModel):
     def __init__(self, args, datase):
