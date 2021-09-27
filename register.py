@@ -29,29 +29,29 @@ MODELS = {
     # 'Neural Collaborative Filtering', WWW2017
     'NCF': model.NeuMF,
     # 'Learning deep structured semantic models for web search using clickthrough data', 2013
-    'TT': model.Two_tower,
+    # 'TT': model.Two_tower,
     # 'BPR: Bayesian personalized ranking from implicit feedback', 2009
     'BPRMF': model.BPRMF,
     # 'Collaborative filtering with graph information: Consistency and scalable methods' NIPS2018
-    'GRMF': None,
+    # 'GRMF': None,
     # 'Collaborative filtering with graph information: Consistency and scalable methods' NIPS2018
-    'GRMF-norm': None,
+    # 'GRMF-norm': None,
     # 'Multi-Graph Convolution Collaborative Filtering', ICDM2019
-    'Multi-GCCF': None,
+    # 'Multi-GCCF': None,
     # 'Graph Convolutional Neural Networks for Web-Scale Recommender Systems', SIGKDD2018
-    'PinSage': None,
+    # 'PinSage': None,
     # 'Deepgcns: Can gcns go as deep as cnns?', IEEE2019
-    'ResGCN': None,
+    # 'ResGCN': None,
     # 'Self-supervised Graph Learning for Recommendation', SIGIR2021
-    'SGL-ED': None,
+    # 'SGL-ED': None,
     # 'Variational Autoencoders for Collaborative Filtering', WWW2018
-    'Mult-VAE': None,
+    # 'Mult-VAE': None,
     # 'Disentangled Graph Collaborative Filtering', SIGIR2020
-    'DGCF': None,
+    # 'DGCF': None,
     # 'Learning Disentangled Representations for Recommendation', NIPS2019
-    'DisenGCN':None,
+    # 'DisenGCN':None,
     # 'Collaborative Filtering with Graph Information: Consistency and Scalable Methods', NIPS2015
-    'MacridVAE': None,
+    # 'MacridVAE': None,
     # 'How Powerful is Graph Convolution for Recommendation', CIKM2021
     'GF_CF': model.GF_CF,
     'LGCN_IDE': model.LGCN_IDE,

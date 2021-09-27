@@ -161,7 +161,6 @@ class LightGCN(BasicModel):
         scores = t.sum(scores, dim=1)
         return scores
 
-
 class NGCF(BasicModel):
     def __init__(self, args, dataset):
         super(NGCF, self).__init__()
@@ -176,7 +175,6 @@ class NGCF(BasicModel):
         self.layer = self.args.layer
         self.layer_size = eval(self.args.layer_size)
         self.mess_dropout = eval(self.args.mess_dropout)
-        print(self.mess_dropout)
         self.split = self.args.split
         self.embedding_user = t.nn.Embedding(num_embeddings=self.n_user, embedding_dim=self.embed_size)
         self.embedding_item = t.nn.Embedding(num_embeddings=self.n_item, embedding_dim=self.embed_size)
@@ -325,8 +323,6 @@ class NGCF(BasicModel):
         scores = t.sum(scores, dim=1)
         return scores
 
-
-
 class BiGN(BasicModel):
     def __init__(self, args, dataset):
         super(BiGN, self).__init__()
@@ -467,14 +463,14 @@ class DGCN_HN(BasicModel):
     def __init_weight(self):
         self.num_users = self.dataset.n_user
         self.num_items = self.dataset.n_item
-        self.latent_dim = self.args.embed_size
+        self.embed_size = self.args.embed_size
         self.n_layers = self.args.layer
         self.keep_prob = self.args.keep_prob
         self.A_split = self.args.split
         self.embedding_user = t.nn.Embedding(
-            num_embeddings=self.num_users, embedding_dim=self.latent_dim)
+            num_embeddings=self.num_users, embedding_dim=self.embed_size)
         self.embedding_item = t.nn.Embedding(
-            num_embeddings=self.num_items, embedding_dim=self.latent_dim)
+            num_embeddings=self.num_items, embedding_dim=self.embed_size)
         if self.args.pretrain:
             self.embedding_user.weight.data.copy_(t.from_numpy(self.config['user_emb']))
             self.embedding_item.weight.data.copy_(t.from_numpy(self.config['item_emb']))
@@ -625,13 +621,13 @@ class NeuMF(BasicModel):
     def __init_weight(self):
         self.num_users = self.dataset.n_user
         self.num_items = self.dataset.n_item
-        self.latent_dim = self.args.embed_size
+        self.embed_size = self.args.embed_size
 
-        self.embedding_GMF_user = t.nn.Embedding(num_embeddings=self.num_users, embedding_dim=self.latent_dim)
-        self.embedding_GMF_item = t.nn.Embedding(num_embeddings=self.num_items, embedding_dim=self.latent_dim)
+        self.embedding_GMF_user = t.nn.Embedding(num_embeddings=self.num_users, embedding_dim=self.embed_size)
+        self.embedding_GMF_item = t.nn.Embedding(num_embeddings=self.num_items, embedding_dim=self.embed_size)
 
-        self.embedding_MLP_item = t.nn.Embedding(num_embeddings=self.num_users, embedding_dim=self.latent_dim)
-        self.embedding_MLP_item = t.nn.Embedding(num_embeddings=self.num_items, embedding_dim=self.latent_dim)
+        self.embedding_MLP_item = t.nn.Embedding(num_embeddings=self.num_users, embedding_dim=self.embed_size)
+        self.embedding_MLP_item = t.nn.Embedding(num_embeddings=self.num_items, embedding_dim=self.embed_size)
 
     def getUsersRating(self, users):
         all_users, all_items = self.computer()
@@ -647,6 +643,12 @@ class GCN(BasicModel):
         super(GCN, self).__init__()
         self.args = args
         self.dataset = dataset
+        self.__init_weight()
+
+    def __ini_weight(self):
+        self.n_user = self.dataset.n_user
+        self.n_item = self.dataset.n_item
+        self.embed_size = self.args.embed_size
 
 
 
@@ -672,28 +674,28 @@ class BPRMF(BasicModel):
     def __init_weight(self):
         self.num_users = self.dataset.n_user
         self.num_items = self.dataset.n_item
-        self.latent_dim = self.args.embed_size
+        self.embed_size = self.args.embed_size
 
-        self.embedding_user = t.nn.Embedding(num_embeddings=self.num_users, embedding_dim=self.latent_dim)
-        self.embedding_item = t.nn.Embedding(num_embeddings=self.num_items, embedding_dim=self.latent_dim)
+        self.embedding_user = t.nn.Embedding(num_embeddings=self.num_users, embedding_dim=self.embed_size)
+        self.embedding_item = t.nn.Embedding(num_embeddings=self.num_items, embedding_dim=self.embed_size)
         print("using Normal distribution N(0,1) initialization for BPRMF")
 
         self.f = nn.Sigmoid()
         print(f"{self.args.model_name} is already to go(dropout:{self.args.dropout})")
 
-    def getUsersRating(self, users):
+    def get_users_rating(self, users):
         users = users.long()
-        # [batch_szie * latent_dim]
+        # [batch_szie * embed_size]
         users_emb = self.embedding_user(users)
         items_emb = self.embedding_item.weight
-        # [batch_szie * latent_dim][latent_dim * num_items] = [batch_szie * num_items]
+        # [batch_szie * embed_size][embed_size * num_items] = [batch_szie * num_items]
         scores = t.matmul(users_emb, items_emb.t())
         return self.f(scores)
 
     def bpr_loss(self, users, pos, neg):
-        users_emb = self.embedding_user(users.long())       # [batch_szie * latent_dim]
-        pos_emb = self.embedding_item(pos.long())           # [batch_szie * latent_dim]
-        neg_emb = self.embedding_item(neg.long())           # [batch_szie * latent_dim]
+        users_emb = self.embedding_user(users.long())       # [batch_szie * embed_size]
+        pos_emb = self.embedding_item(pos.long())           # [batch_szie * embed_size]
+        neg_emb = self.embedding_item(neg.long())           # [batch_szie * embed_size]
         pos_scores = t.sum(t.mul(users_emb, pos_emb), dim=-1, keepdim=True)
         neg_scores = t.sum(t.mul(users_emb, neg_emb), dim=-1, keepdim=True)
         # loss = t.mean(-1.0 * nn.functional.LogSigmoid(neg_scores - pos_scores))
@@ -711,8 +713,7 @@ class BPRMF(BasicModel):
         scores = torch.sum(users_emb*items_emb, dim=1)
         return self.f(scores)
 
-
-class LGCN_IDE(object):
+class LGCN_IDE(BasicModel):
     def __init__(self, args, dataset):
         super(LGCN_IDE, self).__init__()
         self.adj_mat = dataset.R.tolil()
@@ -749,7 +750,6 @@ class LGCN_IDE(object):
             return torch.from_numpy(U_2)
         else:
             return torch.from_numpy(U_1)
-
 
 class GF_CF(BasicModel):
     def __init__(self, args, dataset):
