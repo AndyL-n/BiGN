@@ -27,7 +27,7 @@ MODELS = {
     # 'Neural Graph Collaborative Filtering', SIGIR2019
     'NGCF':model.NGCF,
     # 'Neural Collaborative Filtering', WWW2017
-    'NCF': model.NeuMF,
+    'NeuMF': model.NeuMF,
     # 'Learning deep structured semantic models for web search using clickthrough data', 2013
     # 'TT': model.Two_tower,
     # 'BPR: Bayesian personalized ranking from implicit feedback', 2009

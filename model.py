@@ -1,5 +1,5 @@
-import torch as t
 import torch as torch
+import torch as t
 import torch.nn.functional as F
 from torch import nn
 from parse import cprint
@@ -808,7 +808,7 @@ class GCMC(BasicModel):
 
     def computer(self):
         """
-        propagate methods for GCN
+        propagate methods for GCMC
         """
         users_emb = self.embedding_user.weight
         items_emb = self.embedding_item.weight
@@ -1051,7 +1051,7 @@ class GF_CF(BasicModel):
         return torch.from_numpy(ret)
 
 class NeuMF(BasicModel):
-    def __init__(self, args, datase):
+    def __init__(self, args, dataset):
         super(NeuMF, self).__init__()
         self.args = args
         self.dataset = dataset
@@ -1061,20 +1061,90 @@ class NeuMF(BasicModel):
         self.n_user = self.dataset.n_user
         self.n_item = self.dataset.n_item
         self.embed_size = self.args.embed_size
-
+        # self.layer = self.args.layer
+        self.layer = 1
         self.embedding_GMF_user = t.nn.Embedding(num_embeddings=self.n_user, embedding_dim=self.embed_size)
         self.embedding_GMF_item = t.nn.Embedding(num_embeddings=self.n_item, embedding_dim=self.embed_size)
 
-        self.embedding_MLP_item = t.nn.Embedding(num_embeddings=self.n_user, embedding_dim=self.embed_size)
+        self.embedding_MLP_user = t.nn.Embedding(num_embeddings=self.n_user, embedding_dim=self.embed_size)
         self.embedding_MLP_item = t.nn.Embedding(num_embeddings=self.n_item, embedding_dim=self.embed_size)
 
-    def getUsersRating(self, users):
+        nn.init.normal_(self.embedding_GMF_user.weight, mean=0., std= 0.01)
+        nn.init.normal_(self.embedding_GMF_item.weight, mean=0., std= 0.01)
+        nn.init.normal_(self.embedding_MLP_user.weight, mean=0., std= 0.01)
+        nn.init.normal_(self.embedding_MLP_item.weight, mean=0., std= 0.01)
+        cprint('use normal initilizer')
+
+        # Layer configuration
+        ##  MLP Layers
+        MLP_layers = []
+        layers_shape = [self.embed_size * 2]
+        for i in range(self.layer):
+            layers_shape.append(layers_shape[-1] // 2)
+            MLP_layers.append(nn.Linear(layers_shape[-2], layers_shape[-1]))
+            MLP_layers.append(nn.ReLU())
+
+        print("MLP Layer Shape ::", layers_shape)
+        self.MLP_layers = nn.Sequential(*MLP_layers)
+
+        ## Final Layer
+        self.final_layer = nn.Linear(layers_shape[-1] * 2, 1)
+
+        # Layer initialization
+        for m in self.MLP_layers:
+            if isinstance(m, nn.Linear):
+                nn.init.xavier_uniform_(m.weight)
+        nn.init.kaiming_uniform_(self.final_layer.weight, a=1, nonlinearity='relu')
+
+        for m in self.modules():
+            if isinstance(m, nn.Linear) and m.bias is not None:
+                m.bias.data.zero_()
+
+        print(f"{self.args.model_name} is already to go(dropout:{self.args.dropout})")
+
+    def get_users_rating(self, users):
+        user_GMF_emb = self.embedding_GMF_user(users.long())
+        user_MLP_emb = self.embedding_MLP_user(users.long())
+        print(user_MLP_emb.shape)
+        print(user_GMF_emb.shape)
         all_users, all_items = self.computer()
         users_emb = all_users[users.long()]
         items_emb = all_items
         rating = self.f(t.matmul(users_emb, items_emb.t()))
         return rating
 
-    # def bpr_loss(self, users, pos, neg):
+    def bpr_loss(self, users, pos, neg):
+        user_GMF_emb = self.embedding_GMF_user(users.long())
+        pos_GMF_emb = self.embedding_GMF_item(pos.long())
+        neg_GMF_emb = self.embedding_GMF_item(neg.long())
+        user_MLP_emb = self.embedding_MLP_user(users.long())
+        pos_MLP_emb = self.embedding_MLP_item(pos.long())
+        neg_MLP_emb = self.embedding_MLP_item(neg.long())
+        pos_GMF_vector = torch.mul(user_GMF_emb, pos_GMF_emb) # [batch_size, embed_size]
+        neg_GMF_vector = torch.mul(user_GMF_emb, neg_GMF_emb) # [batch_size, embed_size]
+        print(pos_GMF_vector.shape)
+        print(neg_GMF_vector.shape)
 
+        pos_MLP_vector = torch.cat([user_MLP_emb, pos_MLP_emb], dim=-1)
+        neg_MLP_vector = torch.cat([user_MLP_emb, neg_MLP_emb], dim=-1)
 
+        pos_MLP_vector = self.MLP_layers(pos_MLP_vector)
+        neg_MLP_vector = self.MLP_layers(neg_MLP_vector)
+        print(pos_MLP_vector.shape)
+        print(neg_MLP_vector.shape)
+        pos_vector = torch.cat([pos_GMF_vector, pos_MLP_vector], dim=-1)
+        neg_vector = torch.cat([neg_GMF_vector, neg_MLP_vector], dim=-1)
+
+        pos_scores = self.final_layer(pos_vector)
+        neg_scores = self.final_layer(neg_vector)
+
+        # loss = t.mean(-1.0 * nn.functional.LogSigmoid(neg_scores - pos_scores))
+        loss = t.mean(nn.functional.softplus(neg_scores - pos_scores))
+        reg_loss = (1 / 2) * (user_GMF_emb.norm(2).pow(2) +
+                              pos_GMF_emb.norm(2).pow(2) +
+                              neg_GMF_emb.norm(2).pow(2) +
+                              user_MLP_emb.norm(2).pow(2) +
+                              pos_MLP_emb.norm(2).pow(2) +
+                              neg_MLP_emb.norm(2).pow(2)) / float(len(users))
+        print(loss, reg_loss)
+        return loss, reg_loss
