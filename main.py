@@ -64,7 +64,7 @@ def Test(dataset, model):
             rating = model.get_users_rating(batch_users_gpu)
             # print(rating.shape)
             # print(rating)
-            # sys.exit()
+            # sys.exit(
             #rating = rating.cpu()
             exclude_index = []
             exclude_items = []
@@ -116,7 +116,7 @@ if __name__ == '__main__':
         model = MODELS[args.model_name](args, dataset)
         model = model.to(args.device)
         # model.bpr_loss(t.tensor([1,2]),t.tensor([1,1]),t.tensor([2,2]))
-        # model.get_users_rating(t.tensor([[1],[2]]))
+        # model.get_users_rating(t.tensor([1, 2]))
         optimizer = optim.Adam(model.parameters(), lr=args.lr)
         results = []
         result = Test(dataset, model)

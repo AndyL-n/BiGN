@@ -1103,14 +1103,23 @@ class NeuMF(BasicModel):
         print(f"{self.args.model_name} is already to go(dropout:{self.args.dropout})")
 
     def get_users_rating(self, users):
+        batch_size = users.shape[0]
         user_GMF_emb = self.embedding_GMF_user(users.long())
         user_MLP_emb = self.embedding_MLP_user(users.long())
-        print(user_MLP_emb.shape)
-        print(user_GMF_emb.shape)
-        all_users, all_items = self.computer()
-        users_emb = all_users[users.long()]
-        items_emb = all_items
-        rating = self.f(t.matmul(users_emb, items_emb.t()))
+        item_GMF_emb = self.embedding_GMF_item.weight
+        item_MLP_emb = self.embedding_MLP_item.weight
+        user_GMF_emb = torch.repeat_interleave(user_GMF_emb.unsqueeze(dim=1), repeats=self.n_item, dim=1)
+        item_GMF_emb = item_GMF_emb.unsqueeze(0)
+        user_MLP_emb = torch.repeat_interleave(user_MLP_emb.unsqueeze(dim=1), repeats=self.n_item, dim=1)
+        item_MLP_emb = torch.repeat_interleave(item_MLP_emb.unsqueeze(dim=0), repeats=batch_size, dim=0)
+        GMF_vector = torch.mul(user_GMF_emb, item_GMF_emb)  # [batch_size, n_item, dim]
+
+        MLP_vector = torch.cat([user_MLP_emb, item_MLP_emb],dim=2) # [batch_size, n_item, 2*dim]
+        MLP_vector = self.MLP_layers(MLP_vector)
+
+        vector = torch.cat([GMF_vector, MLP_vector], dim=2)
+        rating = self.final_layer(vector)
+        rating = rating.squeeze()
         return rating
 
     def bpr_loss(self, users, pos, neg):
@@ -1122,16 +1131,13 @@ class NeuMF(BasicModel):
         neg_MLP_emb = self.embedding_MLP_item(neg.long())
         pos_GMF_vector = torch.mul(user_GMF_emb, pos_GMF_emb) # [batch_size, embed_size]
         neg_GMF_vector = torch.mul(user_GMF_emb, neg_GMF_emb) # [batch_size, embed_size]
-        print(pos_GMF_vector.shape)
-        print(neg_GMF_vector.shape)
 
         pos_MLP_vector = torch.cat([user_MLP_emb, pos_MLP_emb], dim=-1)
         neg_MLP_vector = torch.cat([user_MLP_emb, neg_MLP_emb], dim=-1)
 
         pos_MLP_vector = self.MLP_layers(pos_MLP_vector)
         neg_MLP_vector = self.MLP_layers(neg_MLP_vector)
-        print(pos_MLP_vector.shape)
-        print(neg_MLP_vector.shape)
+
         pos_vector = torch.cat([pos_GMF_vector, pos_MLP_vector], dim=-1)
         neg_vector = torch.cat([neg_GMF_vector, neg_MLP_vector], dim=-1)
 
@@ -1146,5 +1152,5 @@ class NeuMF(BasicModel):
                               user_MLP_emb.norm(2).pow(2) +
                               pos_MLP_emb.norm(2).pow(2) +
                               neg_MLP_emb.norm(2).pow(2)) / float(len(users))
-        print(loss, reg_loss)
+
         return loss, reg_loss
