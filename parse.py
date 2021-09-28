@@ -7,11 +7,11 @@ import torch as t
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run BiGN.")
-    parser.add_argument('--model_name', type=str, default='NeuMF',
+    parser.add_argument('--model_name', type=str, default='GF_CF',
                         help="The name of model. support [BiGN, LightGCN, DGCN_HN, GCN, GCMC, NGCF, NeuMF, TT, BPRMF, GF_CF, LGCN_IDE]")
     parser.add_argument('--train_batch', type=int,default=2048,
                         help="The batch size for bpr loss training procedure.")
-    parser.add_argument('--test_batch', type=int, default=512,
+    parser.add_argument('--test_batch', type=int, default=16,
                         help='The batch size of test.')
     parser.add_argument('--embed_size', type=int,default=64,
                         help="Embedding size.")

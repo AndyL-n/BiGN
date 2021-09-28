@@ -577,6 +577,7 @@ class DGCN_HN(BasicModel):
         rating = self.f(t.matmul(users_emb, items_emb.t()))
         return rating
 
+
     def get_embedding(self, users, pos_items, neg_items):
         all_users, all_items = self.computer()
         users_emb = all_users[users]
@@ -1021,15 +1022,15 @@ class GF_CF(BasicModel):
         d_inv = np.power(rowsum, -0.5).flatten()
         d_inv[np.isinf(d_inv)] = 0.
         d_mat = sp.diags(d_inv)  # Du^-0.5       [n_user, n_user]
-        norm_adj = d_mat.dot(adj_mat)  # Du ^ -0.5 * R
-
+        norm_adj = d_mat.dot(adj_mat)  # Du ^ -0.5 * R  [n_user, n_item]
         colsum = np.array(adj_mat.sum(axis=0))  # Di
         d_inv = np.power(colsum, -0.5).flatten()
         d_inv[np.isinf(d_inv)] = 0.
         d_mat = sp.diags(d_inv)
         self.d_mat_i = d_mat  # Di^-0.5       [n_item, n_item]
         self.d_mat_i_inv = sp.diags(1 / d_inv)  # Di^0.5        [n_item, n_item]
-        norm_adj = norm_adj.dot(d_mat)  # Du ^ -0.5 * R * Di ^ -0.5
+        norm_adj = norm_adj.dot(d_mat)  # Du ^ -0.5 * R * Di ^ -0.5 [n_user, n_item]
+
         self.norm_adj = norm_adj.tocsc()
         ut, s, self.vt = sparsesvd(self.norm_adj, 256)  # 奇异值分解
         # [k, n_user] * [k, k] * [k, n_item]
@@ -1039,8 +1040,10 @@ class GF_CF(BasicModel):
     def get_users_rating(self, batch_users):
         norm_adj = self.norm_adj
         adj_mat = self.adj_mat
-        batch_test = np.array(adj_mat[batch_users, :].todense())
+        batch_test = np.array(adj_mat[batch_users, :].todense())    # [batch, n_item]
+        print(batch_test.shape)
         U_2 = batch_test @ norm_adj.T @ norm_adj
+        # [batch, n_item] * [n_item, n_user] * [n_user, n_item] = [batch, n_item]
         if (self.args.dataset == 'amazon-book'):
             ret = U_2
         else:
@@ -1061,13 +1064,13 @@ class NeuMF(BasicModel):
         self.n_user = self.dataset.n_user
         self.n_item = self.dataset.n_item
         self.embed_size = self.args.embed_size
-        # self.layer = self.args.layer
-        self.layer = 1
+        self.layer = self.args.layer
+
         self.embedding_GMF_user = t.nn.Embedding(num_embeddings=self.n_user, embedding_dim=self.embed_size)
         self.embedding_GMF_item = t.nn.Embedding(num_embeddings=self.n_item, embedding_dim=self.embed_size)
 
-        self.embedding_MLP_user = t.nn.Embedding(num_embeddings=self.n_user, embedding_dim=self.embed_size)
-        self.embedding_MLP_item = t.nn.Embedding(num_embeddings=self.n_item, embedding_dim=self.embed_size)
+        self.embedding_MLP_user = t.nn.Embedding(num_embeddings=self.n_user, embedding_dim=self.embed_size * (2 ** (self.layer - 1)))
+        self.embedding_MLP_item = t.nn.Embedding(num_embeddings=self.n_item, embedding_dim=self.embed_size * (2 ** (self.layer - 1)))
 
         nn.init.normal_(self.embedding_GMF_user.weight, mean=0., std= 0.01)
         nn.init.normal_(self.embedding_GMF_item.weight, mean=0., std= 0.01)
@@ -1078,7 +1081,7 @@ class NeuMF(BasicModel):
         # Layer configuration
         ##  MLP Layers
         MLP_layers = []
-        layers_shape = [self.embed_size * 2]
+        layers_shape = [self.embed_size * (2 ** (self.layer))]
         for i in range(self.layer):
             layers_shape.append(layers_shape[-1] // 2)
             MLP_layers.append(nn.Linear(layers_shape[-2], layers_shape[-1]))
@@ -1113,9 +1116,8 @@ class NeuMF(BasicModel):
         user_MLP_emb = torch.repeat_interleave(user_MLP_emb.unsqueeze(dim=1), repeats=self.n_item, dim=1)
         item_MLP_emb = torch.repeat_interleave(item_MLP_emb.unsqueeze(dim=0), repeats=batch_size, dim=0)
         GMF_vector = torch.mul(user_GMF_emb, item_GMF_emb)  # [batch_size, n_item, dim]
-
-        MLP_vector = torch.cat([user_MLP_emb, item_MLP_emb],dim=2) # [batch_size, n_item, 2*dim]
-        MLP_vector = self.MLP_layers(MLP_vector)
+        MLP_vector = torch.cat([user_MLP_emb, item_MLP_emb],dim=2)  # [batch_size, n_item, dim*(2^layer)]
+        MLP_vector = self.MLP_layers(MLP_vector)    # [batch_size, n_item, dim]
 
         vector = torch.cat([GMF_vector, MLP_vector], dim=2)
         rating = self.final_layer(vector)
