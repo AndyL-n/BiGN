@@ -515,13 +515,14 @@ class DGCN_HN(BasicModel):
         return graph, l_graph
 
     def computer(self):
+        from sys import exit
         """
         propagate methods for lightGCN
         """
         users_emb = self.embedding_user.weight
         items_emb = self.embedding_item.weight
         all_emb = t.cat([users_emb, items_emb])
-        print(all_emb.shape)
+        # print(all_emb.shape)
         #   t.split(all_emb , [self.n_user, self.n_item])
         embs = [all_emb]
         if self.args.dropout:
@@ -535,7 +536,6 @@ class DGCN_HN(BasicModel):
         else:
             g_droped = self.Graph
             l_droped = self.LGraph
-            print("-----------------")
 
         for layer in range(self.n_layers):
             if self.A_split:
@@ -549,20 +549,42 @@ class DGCN_HN(BasicModel):
             else:
                 side_emb = t.sparse.mm(g_droped, all_emb)
                 side_L_emb = t.sparse.mm(l_droped, all_emb)
+            # print(side_emb.shape)
+            # print(side_L_emb.shape)
+            # print((side_emb + side_L_emb).shape)
+
             attention_s = t.mean((side_emb * all_emb + side_emb) , dim=1)
+            # print(attention_s)
+            attention_s = t.exp(attention_s)
+            # print(attention_s)
+            # print(attention_s.shape)
+
             attention_l = t.mean((side_L_emb * all_emb + side_L_emb) , dim=1)
-            attention = t.exp(attention_s) + t.exp(attention_l)
-            attention_s = t.exp(attention_s) / attention
-            attention_l = t.exp(attention_l) / attention
+            # print(attention_l)
+            attention_l = t.exp(attention_l)
+            # print(attention_l)
+            # print(attention_l.shape)
+
+            attention = attention_s + attention_l
+            # print(attention)
+            # print(attention.shape)
+
+            attention_s = attention_s / attention
+            # print(attention_s)
+            attention_l = attention_l / attention
+            # print(attention_l)
+
+
             attention_s = attention_s.unsqueeze(1)
             attention_l = attention_l.unsqueeze(1)
-            print(attention_s)
-            print(side_emb)
-            print(attention_s*side_emb)
-            print(attention_s+attention_l)
+            # print(attention_s)
+            # print(side_emb)
+            # print(attention_s*side_emb)
+            # print(attention_s+attention_l)
+            # exit()
             all_emb = all_emb + (attention_s * side_emb) + (attention_l * side_L_emb)
-            print(all_emb.shape)
-            exit()
+            # print(all_emb.shape)
+            # exit()
             embs.append(all_emb)
         embs = t.stack(embs, dim=1)
         # print(embs.size())
@@ -570,7 +592,7 @@ class DGCN_HN(BasicModel):
         users, items = t.split(light_out, [self.n_user, self.n_item])
         return users, items
 
-    def getUsersRating(self, users):
+    def get_users_rating(self, users):
         all_users, all_items = self.computer()
         users_emb = all_users[users.long()]
         items_emb = all_items
@@ -1049,7 +1071,7 @@ class GF_CF(BasicModel):
         else:
             U_1 = batch_test @ self.d_mat_i @ self.vt.T @ self.vt @ self.d_mat_i_inv
             # [batch, n_item] * [n_item, n_item] * [n_item, k] * [k, n_item] * [n_item, n_item] = [batch, n_item]
-            ret = U_2 + 0.3 * U_1
+            ret = U_2 + 0.2 * U_1
 
         return torch.from_numpy(ret)
 

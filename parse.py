@@ -7,11 +7,11 @@ import torch as t
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run BiGN.")
-    parser.add_argument('--model_name', type=str, default='GF_CF',
+    parser.add_argument('--model_name', type=str, default='DGCN_HN',
                         help="The name of model. support [BiGN, LightGCN, DGCN_HN, GCN, GCMC, NGCF, NeuMF, TT, BPRMF, GF_CF, LGCN_IDE]")
     parser.add_argument('--train_batch', type=int,default=2048,
                         help="The batch size for bpr loss training procedure.")
-    parser.add_argument('--test_batch', type=int, default=16,
+    parser.add_argument('--test_batch', type=int, default=2048,
                         help='The batch size of test.')
     parser.add_argument('--embed_size', type=int,default=64,
                         help="Embedding size.")
@@ -19,7 +19,7 @@ def parse_args():
                         help="The layer num of BiGN.")
     parser.add_argument('--layer_size', nargs='?', default='[64,64,64]',
                         help='Output sizes of every layer')
-    parser.add_argument('--lr', type=float,default=0.001,
+    parser.add_argument('--lr', type=float,default=0.0001,
                         help="Learning Rate")
     parser.add_argument('--decay', type=float,default=1e-4,
                         help="Regularizations.")
