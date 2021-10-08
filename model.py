@@ -354,6 +354,7 @@ class BiGN(BasicModel):
             cprint('use NORMAL distribution initilizer')
         self.f = nn.Sigmoid()
         self.Graph = self.dataset.getSparseGraph()
+        self.similarity = self.dataset.getSimilarity()
         print(f"{self.args.model_name} is already to go(dropout:{self.args.dropout})")
 
         # print("save_txt")
@@ -395,6 +396,7 @@ class BiGN(BasicModel):
                 g_droped = self.Graph
         else:
             g_droped = self.Graph
+            similarity = self.similarity
 
         for layer in range(self.n_layers):
             if self.A_split:
@@ -402,9 +404,36 @@ class BiGN(BasicModel):
                 for f in range(len(g_droped)):
                     temp_emb.append(t.sparse.mm(g_droped[f], all_emb))
                 side_emb = t.cat(temp_emb, dim=0)
-                all_emb = side_emb
             else:
-                all_emb = t.sparse.mm(g_droped, all_emb)
+                side_emb = t.sparse.mm(g_droped, all_emb)
+
+            similarity_emb = t.sparse.mm(similarity, all_emb)
+
+            attention_side = t.mean((side_emb * all_emb + side_emb), dim=1)
+            attention_side = t.exp(attention_side)
+
+            attention_sim = t.mean((similarity_emb * all_emb + similarity_emb), dim=1)
+            attention_sim = t.exp(attention_sim)
+
+
+            attention = attention_side + attention_sim
+
+            attention_side = attention_side / attention
+            attention_sim = attention_sim / attention
+            # print(attention_l)
+
+            attention_side = attention_side.unsqueeze(1)
+            attention_sim = attention_sim.unsqueeze(1)
+            # print(attention_s)
+            # print(side_emb)
+            # print(attention_s*side_emb)
+            # print(attention_s+attention_l)
+            # exit()
+            tmp = all_emb
+            all_emb = (attention_side * side_emb) + (attention_sim * similarity_emb)
+            # print(all_emb.shape)
+            # exit()
+
             embs.append(all_emb)
         embs = t.stack(embs, dim=1)
         # print(embs.size())

@@ -164,6 +164,6 @@ if __name__ == '__main__':
             print(precision, recall, ndcg)
             results.append([epoch + 1, t2-t1, aver_loss, time()-t2, recall, ndcg, precision])
             pd.DataFrame(results, columns=['Iteration', 'fit_time', 'loss', 'evaluate_time', 'recall', 'ndcg', 'precision'])\
-                .to_csv('log/{}_{}_layer{}_dim{}_batch{}_K{}_lr{}_{}.csv'
-                        .format(args.model_name, args.dataset, args.layer, args.embed_size, args.train_batch, args.topks, args.lr, timestamp), index=False)
+                .to_csv('log/{}_{}_layer{}_dim{}_batch{}_K{}_lr{}_neighbor{}_{}.csv'
+                        .format(args.model_name, args.dataset, args.layer, args.embed_size, args.train_batch, args.topks, args.lr, args.neighbor, timestamp), index=False)
 
