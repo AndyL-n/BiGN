@@ -83,6 +83,7 @@ class Loader(Dataset):
         self.LGraph = None
         self.RGraph = None
         self.similarity = None
+        self.social= None
 
         print(f"{self.n_user} users")
         print(f"{self.n_item} items")
@@ -424,6 +425,48 @@ class Loader(Dataset):
                 print("don't split the matrix")
         return self.similarity
 
+    def getSocial(self):
+        print("loading social norm adjacency matrix")
+        if self.RGraph is None:
+            try:
+                social_mat = sp.load_npz(self.path + '/adj_social_mat.npz')
+                print("successfully loaded social norm adjacency matrix...")
+                norm_adj = social_mat
+                # print(norm_adj)
+            except:
+                print("generating social norm adjacency matrix")
+                s = time()
+                adj_mat = self.adj_mat
+
+                rowsum = np.array(adj_mat.sum(axis=1))  # Du
+                d_inv = np.power(rowsum, -0.5).flatten()
+                d_inv[np.isinf(d_inv)] = 0.
+                d_mat = sp.diags(d_inv) # Du ^ -0.5
+                norm_adj = d_mat.dot(adj_mat)  # Du ^ -0.5 * R
+
+                colsum = np.array(adj_mat.sum(axis=0))  # Di
+                d_inv = np.power(colsum, -0.5).flatten()
+                d_inv[np.isinf(d_inv)] = 0.
+                d_mat = sp.diags(d_inv) # Di^-0.5
+                norm_adj = norm_adj.dot(d_mat)  # Du ^ -0.5 * R * Di ^ -0.5
+
+                social = norm_adj.T @ norm_adj
+                end = time()
+                social = social.tocsr()
+
+                print(f"costing {end - s}s, saved adj_social_mat...")
+                sp.save_npz(self.path + '/adj_social_mat.npz', social)
+
+            if self.split == True:
+                self.social = self._split_A_hat(social)
+                print("done split matrix")
+            else:
+                self.social = self.convert_sp_mat_to_sp_tensor(social)
+                self.social = self.social.coalesce().to(args.device)
+                print("don't split the matrix")
+            return self.social
+
+
     def build_test(self):
         """
         return:
@@ -462,8 +505,9 @@ class Loader(Dataset):
     #         negItems.append(self.allNeg[user])
     #     return negItems
 
-# dataset = Loader(path="Data/"+args.dataset)
+dataset = Loader(path="Data/"+args.dataset)
 # print(dataset.n_user)
 # dataset.getSparseGraph()
 # # dataset.getSparseRGraph()
 # print(dataset.all_pos[0])
+dataset.getSocial()

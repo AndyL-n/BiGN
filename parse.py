@@ -7,7 +7,7 @@ import torch as t
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run BiGN.")
-    parser.add_argument('--model_name', type=str, default='BiGN',
+    parser.add_argument('--model_name', type=str, default='GF_CF',
                         help="The name of model. support [BiGN, LightGCN, DGCN_HN, GCN, GCMC, NGCF, NeuMF, TT, BPRMF, GF_CF, LGCN_IDE]")
     parser.add_argument('--train_batch', type=int,default=2048,
                         help="The batch size for bpr loss training procedure.")
