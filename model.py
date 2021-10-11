@@ -323,6 +323,38 @@ class NGCF(BasicModel):
         scores = t.sum(scores, dim=1)
         return scores
 
+class DGCF(BasicModel):
+    def __init__(self, args, dataset):
+        super(DGCF, self).__init__()
+        self.args = args
+        self.dataset = dataset
+        self.__init_weight()
+
+    def __init_weight(self):
+        self.n_user = self.dataset.n_user
+        self.n_item = self.dataset.n_item
+        self.embed_size = self.args.embed_size
+        self.layer = self.args.layer
+        self.factor = self.args.factor
+        self.iteration = self.args.interation
+        self.split = self.args.split
+        self.embedding_user = t.nn.Embedding(num_embeddings=self.n_user, embedding_dim=self.embed_size)
+        self.embedding_item = t.nn.Embedding(num_embeddings=self.n_item, embedding_dim=self.embed_size)
+
+        if self.args.pretrain:
+            self.embedding_user.weight.data.copy_(t.from_numpy(self.config['user_emb']))
+            self.embedding_item.weight.data.copy_(t.from_numpy(self.config['item_emb']))
+            print('use pretarined data')
+        else:
+            #             nn.init.xavier_uniform_(self.embedding_user.weight, gain=1)
+            #             nn.init.xavier_uniform_(self.embedding_item.weight, gain=1)
+            #             print('use xavier initilizer')
+            # random normal init seems to be a better choice when lightGCN actually don't use any non-linear activation function
+            nn.init.normal_(self.embedding_user.weight, std=0.1)
+            nn.init.normal_(self.embedding_item.weight, std=0.1)
+            cprint('use NORMAL distribution initilizer')
+        self.f = nn.Sigmoid()
+
 class BiGN(BasicModel):
     def __init__(self, args, dataset):
         super(BiGN, self).__init__()
