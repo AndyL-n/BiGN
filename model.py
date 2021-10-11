@@ -559,6 +559,44 @@ class DGCF(BasicModel):
         neg_emb_ego = self.embedding_item(neg_items)
         return users_emb, pos_emb, neg_emb, users_emb_ego, pos_emb_ego, neg_emb_ego
 
+    def _create_distance_correlation(self, X1, X2):
+
+        def _create_centered_distance(X):
+            '''
+                Used to calculate the distance matrix of N samples
+            '''
+            # calculate the pairwise distance of X
+            # .... A with the size of [batch_size, embed_size/n_factors]
+            # .... D with the size of [batch_size, batch_size]
+            # X = tf.math.l2_normalize(XX, axis=1)
+            r = torch.sum(torch.square(X), 1, keepdims=True)
+            D = torch.sqrt(torch.maximum(r - 2 * torch.matmul(X, X.t()) + r.t(), 0.0) + 1e-8)
+
+            # # calculate the centered distance of X
+            # # .... D with the size of [batch_size, batch_size]
+            D = D - torch.mean(D, dim=0, keepdims=True) - torch.mean(D, dim=1, keepdims=True) \
+                + torch.mean(D)
+            return D
+
+        def _create_distance_covariance(D1, D2):
+            # calculate distance covariance between D1 and D2
+            n_samples = D1.shape[0].type(torch.float32)
+            dcov = torch.sqrt(torch.maximum(torch.sum(D1 * D2) / (n_samples * n_samples), 0.0) + 1e-8)
+            # dcov = torch.sqrt(torch.maximum(torch.sum(D1 * D2)) / n_samples)
+            return dcov
+
+        D1 = _create_centered_distance(X1)
+        D2 = _create_centered_distance(X2)
+
+        dcov_12 = _create_distance_covariance(D1, D2)
+        dcov_11 = _create_distance_covariance(D1, D1)
+        dcov_22 = _create_distance_covariance(D2, D2)
+
+        # calculate the distance correlation
+        dcor = dcov_12 / (torch.sqrt(torch.maximum(dcov_11 * dcov_22, 0.0)) + 1e-10)
+        # return tf.reduce_sum(D1) + tf.reduce_sum(D2)
+        return dcor
+    
     def create_cor_loss(self,users_emb, items_emb):
         # We have to sample some embedded representations out of all nodes.
         # Becasue we have no way to store cor-distance for each pair.
