@@ -596,7 +596,7 @@ class DGCF(BasicModel):
         dcor = dcov_12 / (torch.sqrt(torch.maximum(dcov_11 * dcov_22, 0.0)) + 1e-10)
         # return tf.reduce_sum(D1) + tf.reduce_sum(D2)
         return dcor
-    
+
     def create_cor_loss(self,users_emb, items_emb):
         # We have to sample some embedded representations out of all nodes.
         # Becasue we have no way to store cor-distance for each pair.
@@ -731,8 +731,48 @@ class BiGN(BasicModel):
             g_droped = self.Graph
             similarity = self.similarity
 
-        for layer in range(self.n_layers):
-            if self.A_split:
+        # for layer in range(self.layer):
+        #     if self.split:
+        #         temp_emb = []
+        #         for f in range(len(g_droped)):
+        #             temp_emb.append(t.sparse.mm(g_droped[f], all_emb))
+        #         side_emb = t.cat(temp_emb, dim=0)
+        #     else:
+        #         side_emb = t.sparse.mm(g_droped, all_emb)
+        #
+        #     similarity_emb = t.sparse.mm(similarity, all_emb)
+        #
+        #     attention_side = t.mean((side_emb * all_emb + side_emb), dim=1)
+        #     attention_side = t.exp(attention_side)
+        #
+        #     attention_sim = t.mean((similarity_emb * all_emb + similarity_emb), dim=1)
+        #     attention_sim = t.exp(attention_sim)
+        #
+        #
+        #     attention = attention_side + attention_sim
+        #
+        #     attention_side = attention_side / attention
+        #     attention_sim = attention_sim / attention
+        #     # print(attention_l)
+        #
+        #     attention_side = attention_side.unsqueeze(1)
+        #     attention_sim = attention_sim.unsqueeze(1)
+        #     # print(attention_s)
+        #     # print(side_emb)
+        #     # print(attention_s*side_emb)
+        #     # print(attention_s+attention_l)
+        #     # exit()
+        #     tmp = all_emb
+        #     # all_emb = (attention_side * side_emb) + (attention_sim * similarity_emb)
+        #     # print(all_emb.shape)
+        #     all_emb = side_emb
+        #     # exit()
+        #
+        #     embs.append(all_emb)
+        # embs = t.stack(embs, dim=1)
+
+        for layer in range(self.layer):
+            if self.split:
                 temp_emb = []
                 for f in range(len(g_droped)):
                     temp_emb.append(t.sparse.mm(g_droped[f], all_emb))
@@ -740,6 +780,7 @@ class BiGN(BasicModel):
             else:
                 side_emb = t.sparse.mm(g_droped, all_emb)
 
+            side_emb = side_emb + all_emb if self.args.residual else side_emb
             similarity_emb = t.sparse.mm(similarity, all_emb)
 
             attention_side = t.mean((side_emb * all_emb + side_emb), dim=1)
@@ -748,27 +789,18 @@ class BiGN(BasicModel):
             attention_sim = t.mean((similarity_emb * all_emb + similarity_emb), dim=1)
             attention_sim = t.exp(attention_sim)
 
-
             attention = attention_side + attention_sim
 
             attention_side = attention_side / attention
             attention_sim = attention_sim / attention
-            # print(attention_l)
 
             attention_side = attention_side.unsqueeze(1)
             attention_sim = attention_sim.unsqueeze(1)
-            # print(attention_s)
-            # print(side_emb)
-            # print(attention_s*side_emb)
-            # print(attention_s+attention_l)
-            # exit()
-            tmp = all_emb
-            all_emb = (attention_side * side_emb) + (attention_sim * similarity_emb)
-            # print(all_emb.shape)
-            # exit()
 
+            all_emb = (attention_side * side_emb) + (attention_sim * similarity_emb)
             embs.append(all_emb)
         embs = t.stack(embs, dim=1)
+
         # print(embs.size())
         light_out = t.mean(embs, dim=1)
         users, items = t.split(light_out, [self.n_user, self.n_item])
