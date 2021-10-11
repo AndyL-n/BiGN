@@ -7,8 +7,8 @@ import torch as t
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run BiGN.")
-    parser.add_argument('--model_name', type=str, default='GF_CF',
-                        help="The name of model. support [BiGN, LightGCN, DGCN_HN, GCN, GCMC, NGCF, NeuMF, TT, BPRMF, GF_CF, LGCN_IDE]")
+    parser.add_argument('--model_name', type=str, default='DGCF',
+                        help="The name of model. support [BiGN, LightGCN, DGCN_HN, GCN, GCMC, NGCF, NeuMF, TT, BPRMF, GF_CF, LGCN_IDE, DGCF]")
     parser.add_argument('--train_batch', type=int,default=2048,
                         help="The batch size for bpr loss training procedure.")
     parser.add_argument('--test_batch', type=int, default=2048,
@@ -39,10 +39,12 @@ def parse_args():
     #                     help="path to save weights")
     parser.add_argument('--topks', nargs='?',default="[20]",
                         help="@k test list")
-    # parser.add_argument('--tensorboard', type=int,default=1,
-    #                     help="enable tensorboard")
-    # parser.add_argument('--comment', type=str,default="lgn",
-    #                     help="Comment.")
+    parser.add_argument('--factor', type=int, default=4,
+                        help='Number of factors to disentangle the original embed-size representation.')
+    parser.add_argument('--iteration', type=int, default=2,
+                        help='Number of iterations to perform the routing mechanism.')
+    parser.add_argument('--pick_scale', type=float, default=1e10,
+                        help='Scale')
     parser.add_argument('--neighbor', type=int, default=20,
                         help="The number of neighbor.")
     parser.add_argument('--epochs', type=int, default=1000,

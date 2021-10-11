@@ -431,7 +431,7 @@ class Loader(Dataset):
             try:
                 social_mat = sp.load_npz(self.path + '/adj_social_mat.npz')
                 print("successfully loaded social norm adjacency matrix...")
-                norm_adj = social_mat
+                social = social_mat
                 # print(norm_adj)
             except:
                 print("generating social norm adjacency matrix")
@@ -505,9 +505,9 @@ class Loader(Dataset):
     #         negItems.append(self.allNeg[user])
     #     return negItems
 
-dataset = Loader(path="Data/"+args.dataset)
+# dataset = Loader(path="Data/"+args.dataset)
 # print(dataset.n_user)
 # dataset.getSparseGraph()
 # # dataset.getSparseRGraph()
 # print(dataset.all_pos[0])
-dataset.getSocial()
+# dataset.getSocial()

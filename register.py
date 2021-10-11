@@ -47,7 +47,7 @@ MODELS = {
     # 'Variational Autoencoders for Collaborative Filtering', WWW2018
     # 'Mult-VAE': None,
     # 'Disentangled Graph Collaborative Filtering', SIGIR2020
-    # 'DGCF': None,
+    'DGCF': model.DGCF,
     # 'Learning Disentangled Representations for Recommendation', NIPS2019
     # 'DisenGCN':None,
     # 'Collaborative Filtering with Graph Information: Consistency and Scalable Methods', NIPS2015

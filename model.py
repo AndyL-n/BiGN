@@ -8,6 +8,7 @@ from sparsesvd import sparsesvd
 import time
 import numpy as np
 import scipy.sparse as sp
+import random as rd
 
 class BasicModel(nn.Module):
     def __init__(self):
@@ -61,7 +62,7 @@ class LightGCN(BasicModel):
             cprint('use NORMAL distribution initilizer')
         self.f = nn.Sigmoid()
         self.Graph = self.dataset.getSparseGraph()
-        print(f"{self.args.model_name} is already to go(dropout:{self.args.dropout})")
+        print(f"{self.args.model_name} is already to go(dropout:{self.args.dropout})🏃")
 
         # print("save_txt")
 
@@ -336,8 +337,9 @@ class DGCF(BasicModel):
         self.embed_size = self.args.embed_size
         self.layer = self.args.layer
         self.factor = self.args.factor
-        self.iteration = self.args.interation
+        self.iteration = self.args.iteration
         self.split = self.args.split
+        self.pick_scale = self.args.pick_scale
         self.embedding_user = t.nn.Embedding(num_embeddings=self.n_user, embedding_dim=self.embed_size)
         self.embedding_item = t.nn.Embedding(num_embeddings=self.n_item, embedding_dim=self.embed_size)
 
@@ -354,6 +356,267 @@ class DGCF(BasicModel):
             nn.init.normal_(self.embedding_item.weight, std=0.1)
             cprint('use NORMAL distribution initilizer')
         self.f = nn.Sigmoid()
+        self.Graph = self.dataset.getSparseGraph()
+        self.adj_mat = self.dataset.adj_mat
+        self.adj_mat = self.adj_mat.tocoo()
+        self.head_list = list(self.adj_mat.row)
+        self.tail_list = list(self.adj_mat.col)
+        self.val_list = list(self.adj_mat.data)
+        self.shape = self.adj_mat.shape
+
+        total_batch = (self.dataset.n_train - 1) // self.args.train_batch + 1
+        self.cor_batch_size = int(max(self.n_user/total_batch, self.n_item/total_batch))
+        print(total_batch)
+        print(self.cor_batch_size)
+        print(len(self.head_list), len(self.tail_list), len(self.val_list))
+        print(self.shape)
+        print(f"{self.args.model_name} is already to go(dropout:{self.args.dropout})🏃")
+
+    def disentangling(self, factor_num, factor_values, pick=False):
+        A_factors = []
+        D_col_factors = []
+        D_row_factors = []
+        # get the indices of adjacency matrix
+
+        # apply factor-aware softmax function over the values of adjacency matrix
+        # ....factor_values is [factor_num, len(val_list)]
+
+        factor_scores = F.softmax(factor_values, 0)
+
+        if pick:
+            min_A = torch.min(factor_scores, 0)
+            index = factor_scores > (min_A + 0.0000001)
+            index = index.type(torch.float32) * (self.pick_scale - 1.0) + 1.0
+            # adjust the weight of the minimum factor to 1/self.pick_scale
+
+            factor_scores = factor_scores * index
+            factor_scores = factor_scores / torch.sum(factor_scores, 0)
+
+        # 生成每一个intent矩阵
+        for i in range(factor_num):
+            # in the i-th factor, couple the adjcency values with the adjacency indices
+            # .... A i-tensor is a sparse tensor with size of [n_users+n_items,n_users+n_items]
+            A_i_scores = factor_scores[i]
+            A_i_tensor = torch.sparse_coo_tensor(indices=[self.head_list, self.tail_list], values=A_i_scores,size=self.shape)
+            # get the degree values of A_i_tensor
+            # .... D_i_scores_col is [n_users+n_items, 1]
+            # .... D_i_scores_row is [1, n_users+n_items]
+            D_i_col_scores = 1 / torch.sqrt(torch.sparse.sum(A_i_tensor, dim=1).to_dense())
+            D_i_row_scores = 1 / torch.sqrt(torch.sparse.sum(A_i_tensor, dim=0).to_dense())
+
+            # couple the laplacian values with the adjacency indices
+            # .... A_i_tensor is a sparse tensor with size of [n_users+n_items, n_users+n_items]
+            D_i_col_tensor = torch.sparse_coo_tensor(
+                indices=[list(range(self.n_user + self.n_item)), list(range(self.n_user + self.n_item))],
+                values=D_i_col_scores, size=self.shape)
+            D_i_row_tensor = torch.sparse_coo_tensor(
+                indices=[list(range(self.n_user + self.n_item)), list(range(self.n_user + self.n_item))],
+                values=D_i_row_scores, size=self.shape)
+
+            A_factors.append(A_i_tensor)
+            D_col_factors.append(D_i_col_tensor)
+            D_row_factors.append(D_i_row_tensor)
+
+        # return a (n_factors)-length list of laplacian matrix
+        return A_factors, D_col_factors, D_row_factors
+
+    def computer(self, pick_=False):
+        '''
+        pick_ : True, the model would narrow the weight of the least important factor down to 1/args.pick_scale.
+        pick_ : False, do nothing.
+        '''
+        p_test = False
+        p_train = False
+
+        # get a (n_factors)-length list of [n_users+n_items, n_users+n_items]
+        factor_values = torch.ones(self.factor, len(self.val_list))
+
+        users_emb = self.embedding_user.weight
+        items_emb = self.embedding_item.weight
+        all_emb = torch.cat([users_emb, items_emb])
+        embs = [all_emb]
+        embs_t = [all_emb]
+
+        output_factors_distribution = []
+
+        # 兴趣因子
+        factor_num = [self.factor for _ in range(self.layer)]
+        # T 传播距离
+        iter_num = [self.iteration for _ in range(self.layer)]
+        for l in range(self.layer):
+            # prepare the output embedding list
+            # .... layer_embeddings stores a (n_factors)-len list of outputs derived from the last routing iterations.
+            factor = factor_num[l]
+            iteration = iter_num[l]
+
+            layer_emb = []
+            layer_emb_t = []
+
+            # split the input embedding table
+            # .... ego_layer_emb is a (n_factors)-len list of embeddings [n_users+n_items, embed_size/n_factors]
+            # 注意tensorflow 和 torch split 区别
+            ego_layer_emb = torch.split(all_emb, self.embed_size//factor, 1)
+            ego_layer_emb_t = torch.split(all_emb, self.embed_size//factor, 1)
+
+            # perform routing mechanism
+            for t in range(iteration):
+                iter_emb = []
+                iter_emb_t = []
+                iter_val = []
+
+                # split the adjacency values & get three lists of [n_users+n_items, n_users+n_items] sparse tensors
+                # .... A_factors is a (n_factors)-len list, each of which is an adjacency matrix
+                # .... D_col_factors is a (n_factors)-len list, each of which is a degree matrix w.r.t. columns
+                # .... D_row_factors is a (n_factors)-len list, each of which is a degree matrix w.r.t. rows
+                if t == iteration - 1:
+                    p_test = pick_
+                    p_train = False
+
+                A_factors, D_col_factors, D_row_factors = self.disentangling(factor, factor_values, pick=p_train)
+                A_factors_t, D_col_factors_t, D_row_factors_t = self.disentangling(factor, factor_values, pick=p_test)
+
+                # 对intent进行归一化
+                for f in range(factor):
+                    # 第K个因素 对每个
+                    factor_emb = torch.sparse.mm(D_col_factors[f], ego_layer_emb[f])
+                    factor_emb = torch.sparse.mm(A_factors[f], factor_emb)
+                    factor_emb = torch.sparse.mm(D_col_factors[f], factor_emb)
+
+                    factor_emb_t = torch.sparse.mm(D_col_factors_t[f], ego_layer_emb_t[f])
+                    factor_emb_t = torch.sparse.mm(A_factors_t[f], factor_emb_t)
+                    factor_emb_t = torch.sparse.mm(D_col_factors_t[f], factor_emb_t)
+
+                    iter_emb.append(factor_emb)
+                    iter_emb_t.append(factor_emb_t)
+
+                    if t == iteration - 1:
+                        layer_emb = iter_emb
+                        layer_emb_t = iter_emb_t
+
+                    # get the factor-wise embeddings
+                    # .... head_factor_embeddings is a dense tensor with the size of [all_h_list, embed_size/n_factors]
+                    # .... analogous to tail_factor_embeddings
+
+                    # weight
+                    head_emb = factor_emb[self.head_list]
+                    # distilled information
+                    tail_emb = ego_layer_emb[f][self.tail_list]
+
+                    # .... constrain the vector length
+                    # .... make the following attentive weights within the range of (0,1)
+                    head_emb = F.normalize(head_emb, dim=1)
+                    tail_emb = F.normalize(tail_emb, dim=1)
+
+                    # get the attentive weights
+                    # .... factor_value is a dense tensor with the size of [all_h_list,1]
+                    factor_value = torch.sum(torch.mul(head_emb, torch.tanh(tail_emb)), axis=1)
+
+                    # update the attentive weights
+                    iter_val.append(factor_value)
+
+
+                # pack (n_factors) adjacency values into one [n_factors, all_h_list] tensor
+                iter_val = torch.stack(iter_val, 0)
+                # add all layer-wise attentive weights up.
+                factor_values += iter_val
+
+                if t == iteration - 1:
+                    # layer_embeddings = iter_embeddings
+                    output_factors_distribution.append(A_factors)
+
+            # sum messages of neighbors, [n_users+n_items, embed_size]
+            side_emb = torch.cat(layer_emb, 1)
+            side_emb_t = torch.cat(layer_emb_t, 1)
+            all_emb = side_emb
+            all_emb_t = side_emb_t
+            # concatenate outputs of all layers
+            embs.append(all_emb)
+            embs_t.append(all_emb_t)
+
+        embs = torch.stack(embs, 1)
+        embs = torch.mean(embs, 1)
+        embs_t = torch.stack(embs_t, 1)
+        embs_t = torch.mean(embs_t, 1)
+        users_emb, items_emb = torch.split(embs, [self.n_user, self.n_item], 0)
+        users_emb_t, items_emb_t = torch.split(embs_t, [self.n_user, self.n_item], 0)
+        # return users_emb, items_emb, output_factors_distribution, users_emb_t, items_emb_t
+        return users_emb, items_emb
+
+    def get_users_rating(self, users):
+        all_users, all_items = self.computer()
+        users_emb = all_users[users.long()]
+        items_emb = all_items
+        rating = self.f(t.matmul(users_emb, items_emb.t()))
+        return rating
+
+    def get_embedding(self, users, pos_items, neg_items):
+        all_users, all_items = self.computer()
+        users_emb = all_users[users]
+        pos_emb = all_items[pos_items]
+        neg_emb = all_items[neg_items]
+        users_emb_ego = self.embedding_user(users)
+        pos_emb_ego = self.embedding_item(pos_items)
+        neg_emb_ego = self.embedding_item(neg_items)
+        return users_emb, pos_emb, neg_emb, users_emb_ego, pos_emb_ego, neg_emb_ego
+
+    def create_cor_loss(self,users_emb, items_emb):
+        # We have to sample some embedded representations out of all nodes.
+        # Becasue we have no way to store cor-distance for each pair.
+        cor_users = rd.sample(list(range(self.n_user)), self.cor_batch_size)
+        cor_items = rd.sample(list(range(self.n_item)), self.cor_batch_size)
+
+        cor_users = torch.tensor(cor_users, dtype=torch.long)
+        cor_items = torch.tensor(cor_items, dtype=torch.long)
+
+        cor_users_emb = users_emb[cor_users.long()]
+        cor_items_emb = items_emb[cor_items.long()]
+        print(cor_users_emb.shape)
+
+        cor_loss = torch.zeros(1)
+
+        ui_embeddings = torch.cat([cor_users_emb, cor_items_emb], 0)
+        print(ui_embeddings)
+        ui_factor_embeddings = torch.split(ui_embeddings, self.embed_size//self.factor, 1)
+        print(ui_factor_embeddings)
+
+        for i in range(0, self.n_factors - 1):
+            x = ui_factor_embeddings[i]
+            y = ui_factor_embeddings[i + 1]
+            cor_loss += self._create_distance_correlation(x, y)
+
+        cor_loss /= ((self.n_factors + 1.0) * self.n_factors / 2)
+        return cor_loss
+
+    def bpr_loss(self, users, pos, neg):
+        # (users_emb, pos_emb, neg_emb, userEmb0, posEmb0, negEmb0) = self.get_embedding(users.long(), pos.long(), neg.long())
+        all_users, all_items = self.computer()
+        users_emb = all_users[users.long()]
+        pos_emb = all_items[pos.long()]
+        neg_emb = all_items[neg.long()]
+        userEmb0 = self.embedding_user(users.long())
+        posEmb0 = self.embedding_item(pos.long())
+        negEmb0 = self.embedding_item(neg.long())
+
+        reg_loss = (1 / 2) * (userEmb0.norm(2).pow(2) +
+                              posEmb0.norm(2).pow(2) +
+                              negEmb0.norm(2).pow(2)) / float(len(users))
+        pos_scores = t.mul(users_emb, pos_emb)
+        pos_scores = t.sum(pos_scores, dim=1)
+        neg_scores = t.mul(users_emb, neg_emb)
+        neg_scores = t.sum(neg_scores, dim=1)
+
+        loss = t.mean(t.nn.functional.softplus(neg_scores - pos_scores))
+
+        return loss, reg_loss
+
+    def forward(self, users, items):
+        # compute embedding
+        all_users, all_items = self.computer()
+        users_emb = all_users[users]
+        items_emb = all_items[items]
+        scores = t.mul(users_emb, items_emb)
+        scores = t.sum(scores, dim=1)
+        return scores
 
 class BiGN(BasicModel):
     def __init__(self, args, dataset):
