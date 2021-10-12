@@ -17,6 +17,9 @@ class BasicModel(nn.Module):
     def get_users_rating(self, users):
         raise NotImplementedError
 
+    def save_model(self, path):
+        torch.save(self.state_dict(), path)
+
 class PairWiseModel(BasicModel):
     def __init__(self):
         super(PairWiseModel, self).__init__()
@@ -366,10 +369,6 @@ class DGCF(BasicModel):
 
         total_batch = (self.dataset.n_train - 1) // self.args.train_batch + 1
         self.cor_batch_size = int(max(self.n_user/total_batch, self.n_item/total_batch))
-        print(total_batch)
-        print(self.cor_batch_size)
-        print(len(self.head_list), len(self.tail_list), len(self.val_list))
-        print(self.shape)
         print(f"{self.args.model_name} is already to go(dropout:{self.args.dropout})🏃")
 
     def disentangling(self, factor_num, factor_values, pick=False):
@@ -429,7 +428,7 @@ class DGCF(BasicModel):
         p_train = False
 
         # get a (n_factors)-length list of [n_users+n_items, n_users+n_items]
-        factor_values = torch.ones(self.factor, len(self.val_list))
+        factor_values = torch.ones(self.factor, len(self.val_list)).to(self.args.device)
 
         users_emb = self.embedding_user.weight
         items_emb = self.embedding_item.weight

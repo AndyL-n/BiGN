@@ -7,7 +7,7 @@ import torch as t
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run BiGN.")
-    parser.add_argument('--model_name', type=str, default='DGCF',
+    parser.add_argument('--model_name', type=str, default='BiGN',
                         help="The name of model. support [BiGN, LightGCN, DGCN_HN, GCN, GCMC, NGCF, NeuMF, TT, BPRMF, GF_CF, LGCN_IDE, DGCF]")
     parser.add_argument('--train_batch', type=int,default=2048,
                         help="The batch size for bpr loss training procedure.")
@@ -45,7 +45,7 @@ def parse_args():
                         help='Number of iterations to perform the routing mechanism.')
     parser.add_argument('--pick_scale', type=float, default=1e10,
                         help='Scale')
-    parser.add_argument('--neighbor', type=int, default=20,
+    parser.add_argument('--neighbor', type=int, default=10,
                         help="The number of neighbor.")
     parser.add_argument('--epochs', type=int, default=1000,
                         help="The number of epochs.")
