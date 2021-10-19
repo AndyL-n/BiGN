@@ -156,6 +156,8 @@ class LightGCN(BasicModel):
 
         return loss, reg_loss
 
+    # def ccl_loss(self):
+
     def forward(self, users, items):
         # compute embedding
         all_users, all_items = self.computer()

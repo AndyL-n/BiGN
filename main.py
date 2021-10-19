@@ -143,8 +143,9 @@ if __name__ == '__main__':
         for epoch in range(args.epochs):
             t1 = time()
             S = sample(dataset)
+            exit()
             users = t.Tensor(S[:, 0]).long()
-            posItems = t.Tensor(S[:, 1]).long()
+            posItems = t.Tensor(S[:, 1:]).long()
             negItems = t.Tensor(S[:, 2]).long()
 
             users = users.to(args.device)
