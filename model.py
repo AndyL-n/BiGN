@@ -156,7 +156,25 @@ class LightGCN(BasicModel):
 
         return loss, reg_loss
 
-    # def ccl_loss(self):
+    def css_loss(self, users, pos, neg):
+        print("-----------css_loss-------------")
+        all_users, all_items = self.computer()
+        users_emb = all_users[users]
+        pos_emb = all_items[pos]
+        negs_emb = all_items[neg]
+        pos_scores = t.cosine_similarity(users_emb, pos_emb)
+        negs_scores = t.cosine_similarity(users_emb.unsqueeze(1), negs_emb, dim=2)
+        negs_scores = t.relu(negs_scores - 0.8)
+        negs_scores = t.mean(negs_scores, dim=1)
+        loss = t.mean(t.nn.functional.softplus(150 * negs_scores - pos_scores))
+
+        users_emb_ego = self.embedding_user(users)
+        pos_emb_ego = self.embedding_item(pos)
+        neg_emb_ego = self.embedding_item(neg)
+        reg_loss = (1 / 2) * (users_emb_ego.norm(2).pow(2) +
+                              pos_emb_ego.norm(2).pow(2) +
+                              neg_emb_ego.norm(2).pow(2)) / float(len(users))
+        return loss, reg_loss
 
     def forward(self, users, items):
         # compute embedding

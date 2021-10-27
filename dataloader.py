@@ -353,9 +353,10 @@ class Loader(Dataset):
     def getSimilarity(self):
         print("loading similarity matrix")
         if self.similarity is None:
-            if args.neighbor == 0:
+            if args.neighbor == 10:
                 try:
                     similarity = sp.load_npz(self.path + '/similarity_mat.npz')
+                    print(similarity[0][0])
                     print("successfully loaded similarity...")
                 except:
                     print("generating similarity matrix")
@@ -505,9 +506,11 @@ class Loader(Dataset):
     #         negItems.append(self.allNeg[user])
     #     return negItems
 
-# dataset = Loader(path="Data/"+args.dataset)
+dataset = Loader(path="Data/amazon-book")
+dataset.getSimilarity()
 # print(dataset.n_user)
 # dataset.getSparseGraph()
 # # dataset.getSparseRGraph()
 # print(dataset.all_pos[0])
 # dataset.getSocial()
+# data = sp.load_npz(self.path + '/adj_social_mat.npz')

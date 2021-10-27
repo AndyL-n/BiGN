@@ -5,7 +5,7 @@ from parse import args
 from time import time
 from sklearn.metrics import roc_auc_score
 import os
-
+from tqdm import tqdm
 
 
 class BPRLoss:
@@ -31,19 +31,23 @@ def sample(dataset):
     users = np.random.randint(0, dataset.n_user, user_num)
     allPos = dataset.all_pos
     S = []
-    for i, user in enumerate(users):
+    for i, user in tqdm(enumerate(users)):
         posForUser = allPos[user]
         if len(posForUser) == 0:
             continue
         posindex = np.random.randint(0, len(posForUser))
         positem = posForUser[posindex]
-        while True:
+        neg = []
+        while len(neg) < 10:
             negitem = np.random.randint(0, dataset.n_item)
-            if negitem in posForUser:
+            if negitem in posForUser or negitem in neg:
                 continue
             else:
-                break
-        S.append([user, positem, negitem])
+                neg.append(negitem)
+        # example = [user, positem] + neg
+        S.append([user, positem] + neg)
+        if(i > 20):
+            break
     S = np.array(S)
     return S
 
