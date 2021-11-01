@@ -1180,8 +1180,9 @@ class GCN(BasicModel):
                               negEmb0.norm(2).pow(2)) / float(len(users))
         pos_scores = t.mul(users_emb, pos_emb)
         pos_scores = t.sum(pos_scores, dim=1)
-        neg_scores = t.mul(users_emb, neg_emb)
-        neg_scores = t.sum(neg_scores, dim=1)
+        neg_scores = t.mul(users_emb.unsqueeze(1), neg_emb)
+        neg_scores = t.sum(neg_scores, dim=2)
+        neg_scores = t.mean(neg_scores, dim=1)
 
         loss = t.mean(t.nn.functional.softplus(neg_scores - pos_scores))
 

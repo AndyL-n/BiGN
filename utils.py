@@ -31,14 +31,14 @@ def sample(dataset):
     users = np.random.randint(0, dataset.n_user, user_num)
     allPos = dataset.all_pos
     S = []
-    for i, user in tqdm(enumerate(users)):
+    for i, user in enumerate(users):
         posForUser = allPos[user]
         if len(posForUser) == 0:
             continue
         posindex = np.random.randint(0, len(posForUser))
         positem = posForUser[posindex]
         neg = []
-        while len(neg) < 10:
+        while len(neg) < 1:
             negitem = np.random.randint(0, dataset.n_item)
             if negitem in posForUser or negitem in neg:
                 continue
@@ -46,8 +46,6 @@ def sample(dataset):
                 neg.append(negitem)
         # example = [user, positem] + neg
         S.append([user, positem] + neg)
-        if(i > 20):
-            break
     S = np.array(S)
     return S
 

@@ -505,9 +505,9 @@ class Loader(Dataset):
     #     for user in users:
     #         negItems.append(self.allNeg[user])
     #     return negItems
-
-dataset = Loader(path="Data/amazon-book")
-dataset.getSimilarity()
+#
+# dataset = Loader(path="Data/amazon-book")
+# dataset.getSimilarity()
 # print(dataset.n_user)
 # dataset.getSparseGraph()
 # # dataset.getSparseRGraph()

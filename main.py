@@ -143,7 +143,6 @@ if __name__ == '__main__':
         for epoch in range(args.epochs):
             t1 = time()
             S = sample(dataset)
-            print(S.shape)
             users = t.Tensor(S[:, 0]).long()
             posItems = t.Tensor(S[:, 1]).long()
             negItems = t.Tensor(S[:, 2:]).long()
@@ -155,8 +154,8 @@ if __name__ == '__main__':
             aver_loss = 0.
             for (batch_i, (batch_users, batch_pos, batch_neg)) in enumerate(
                     minibatch(users, posItems, negItems, batch_size=args.train_batch)):
-                # loss, reg_loss = model.bpr_loss(batch_users, batch_pos, batch_neg)
-                loss,reg_loss = model.css_loss(batch_users, batch_pos, batch_neg)
+                loss, reg_loss = model.bpr_loss(batch_users, batch_pos, batch_neg)
+                # loss,reg_loss = model.css_loss(batch_users, batch_pos, batch_neg)
                 reg_loss = reg_loss * args.decay
                 loss = loss + reg_loss
 
@@ -178,4 +177,4 @@ if __name__ == '__main__':
             pd.DataFrame(results, columns=['Iteration', 'fit_time', 'loss', 'evaluate_time', 'recall', 'ndcg', 'precision']).to_csv('log/'+ path +'.csv')
             model.save_model('weight/' + path + '_epoch{}.tar'.format(epoch + 1))
             if epoch > 0:
-                os.remove('weight/' + path + '_epoch{}.tar'.format(epoch - 1))
+                os.remove('weight/' + path + '_epoch{}.tar'.format(epoch))
