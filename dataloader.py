@@ -27,12 +27,7 @@ class Loader(Dataset):
         train_file = path + '/train.txt'
         test_file = path + '/test.txt'
 
-        self.split = args.split
-        self.folds = args.a_fold
-        self.mode_dict = {'train': 0, "test": 1}
-
         # get number of users and items
-        self.mode = self.mode_dict['train']
         self.n_user, self.n_item = 0, 0
         self.n_train, self.n_test = 0, 0
 
@@ -93,6 +88,7 @@ class Loader(Dataset):
 
         # [n_user, n_item], bipartite graph
         self.R = csr_matrix((np.ones(len(self.train_user)), (self.train_user, self.train_item)), shape=(self.n_user, self.n_item))
+
         try:
             self.adj_mat = sp.load_npz(self.path + '/adj_mat.npz')
             print("successfully loaded adjacency matrix...")
@@ -122,19 +118,7 @@ class Loader(Dataset):
         self.all_pos = self.get_user_pos(list(range(self.n_user)))
         self.test_dict = self.build_test()
 
-        print(f"{args.dataset} is ready to go")
-
-    def split_A_hat(self,A):
-        A_fold = []
-        fold_len = (self.n_user + self.n_item) // self.folds
-        for i_fold in range(self.folds):
-            start = i_fold*fold_len
-            if i_fold == self.folds - 1:
-                end = self.n_user + self.n_item
-            else:
-                end = (i_fold + 1) * fold_len
-            A_fold.append(self.convert_sp_mat_to_sp_tensor(A[start:end]).coalesce().to(args.device))
-        return A_fold
+        print(f"{args.dataset} is ready to go🏃")
 
     def convert_sp_mat_to_sp_tensor(self, X):
         coo = X.tocoo().astype(np.float32)
@@ -172,13 +156,9 @@ class Loader(Dataset):
                 print(f"costing {end-s}s, saved adj_symmetric_mat...")
                 sp.save_npz(self.path + '/adj_symmetric_mat.npz', norm_adj)
 
-            if self.split == True:
-                self.Graph = self._split_A_hat(norm_adj)
-                print("done split matrix")
-            else:
-                self.Graph = self.convert_sp_mat_to_sp_tensor(norm_adj)
-                self.Graph = self.Graph.coalesce().to(args.device)
-                print("don't split the matrix")
+
+            self.Graph = self.convert_sp_mat_to_sp_tensor(norm_adj)
+            self.Graph = self.Graph.coalesce().to(args.device)
         return self.Graph
 
 
@@ -209,13 +189,10 @@ class Loader(Dataset):
                 print(f"costing {end - s}s, saved adj_L_mat...")
                 sp.save_npz(self.path + '/adj_L_mat.npz', norm_adj)
 
-            if self.split == True:
-                self.LGraph = self._split_A_hat(norm_adj)
-                print("done split matrix")
-            else:
-                self.LGraph = self.convert_sp_mat_to_sp_tensor(norm_adj)
-                self.LGraph = self.LGraph.coalesce().to(args.device)
-                print("don't split the matrix")
+
+            self.LGraph = self.convert_sp_mat_to_sp_tensor(norm_adj)
+            self.LGraph = self.LGraph.coalesce().to(args.device)
+            print("don't split the matrix")
         return self.LGraph
 
     def getSparseRGraph(self):
@@ -244,13 +221,10 @@ class Loader(Dataset):
                 print(f"costing {end - s}s, saved adj_R_mat...")
                 sp.save_npz(self.path + '/adj_R_mat.npz', norm_adj)
 
-            if self.split == True:
-                self.RGraph = self._split_A_hat(norm_adj)
-                print("done split matrix")
-            else:
-                self.RGraph = self.convert_sp_mat_to_sp_tensor(norm_adj)
-                self.RGraph = self.RGraph.coalesce().to(args.device)
-                print("don't split the matrix")
+
+            self.RGraph = self.convert_sp_mat_to_sp_tensor(norm_adj)
+            self.RGraph = self.RGraph.coalesce().to(args.device)
+            print("don't split the matrix")
         return self.RGraph
 
     def normalization(self, similarity):
@@ -417,13 +391,10 @@ class Loader(Dataset):
             similarity = similarity.tocsr()
             similarity = self.normalization(similarity)
 
-            if self.split == True:
-                self.similarity = self._split_A_hat(similarity)
-                print("done split matrix")
-            else:
-                self.similarity = self.convert_sp_mat_to_sp_tensor(similarity)
-                self.similarity = self.similarity.coalesce().to(args.device)
-                print("don't split the matrix")
+
+            self.similarity = self.convert_sp_mat_to_sp_tensor(similarity)
+            self.similarity = self.similarity.coalesce().to(args.device)
+            print("don't split the matrix")
         return self.similarity
 
     def getSocial(self):
@@ -458,14 +429,10 @@ class Loader(Dataset):
                 print(f"costing {end - s}s, saved adj_social_mat...")
                 sp.save_npz(self.path + '/adj_social_mat.npz', social)
 
-            if self.split == True:
-                self.social = self._split_A_hat(social)
-                print("done split matrix")
-            else:
-                self.social = self.convert_sp_mat_to_sp_tensor(social)
-                self.social = self.social.coalesce().to(args.device)
-                print("don't split the matrix")
-            return self.social
+            self.social = self.convert_sp_mat_to_sp_tensor(social)
+            self.social = self.social.coalesce().to(args.device)
+            print("don't split the matrix")
+        return self.social
 
 
     def build_test(self):
@@ -506,7 +473,7 @@ class Loader(Dataset):
     #         negItems.append(self.allNeg[user])
     #     return negItems
 #
-# dataset = Loader(path="Data/amazon-book")
+dataset = Loader(path="Data/gowalla")
 # dataset.getSimilarity()
 # print(dataset.n_user)
 # dataset.getSparseGraph()

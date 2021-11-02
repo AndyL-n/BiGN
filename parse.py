@@ -42,7 +42,7 @@ def parse_args():
     parser.add_argument('--factor', type=int, default=4,
                         help='Number of factors to disentangle the original embed-size representation.')
     parser.add_argument('--iteration', type=int, default=2,
-                        help='Number of iterations to perform the routing mechanism.')
+                        help='Number of iterations to perform the routing mech2222anism.')
     parser.add_argument('--pick_scale', type=float, default=1e10,
                         help='Scale')
     parser.add_argument('--neighbor', type=int, default=10,
