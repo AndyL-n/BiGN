@@ -36,36 +36,31 @@ class PairWiseModel(BasicModel):
         raise NotImplementedError
 
 class LightGCN(BasicModel):
-    def __init__(self, args, dataset):
+    def __init__(self, params, dataset):
         super(LightGCN, self).__init__()
-        self.args = args
+        self.params = params
         self.dataset = dataset
         self.__init_weight()
 
     def __init_weight(self):
         self.n_user = self.dataset.n_user
         self.n_item = self.dataset.n_item
-        self.embed_size = self.args.embed_size
-        self.layer = self.args.layer
-        self.split = self.args.split
+        self.embed_size = self.params['embed_size']
+        self.layer = self.params['layer']
         self.embedding_user = t.nn.Embedding(num_embeddings=self.n_user, embedding_dim=self.embed_size)
         self.embedding_item = t.nn.Embedding(num_embeddings=self.n_item, embedding_dim=self.embed_size)
-        
-        if self.args.pretrain:
-            self.embedding_user.weight.data.copy_(t.from_numpy(self.config['user_emb']))
-            self.embedding_item.weight.data.copy_(t.from_numpy(self.config['item_emb']))
-            print('use pretarined data')
-        else:
-            #             nn.init.xavier_uniform_(self.embedding_user.weight, gain=1)
-            #             nn.init.xavier_uniform_(self.embedding_item.weight, gain=1)
-            #             print('use xavier initilizer')
-            # random normal init seems to be a better choice when lightGCN actually don't use any non-linear activation function
-            nn.init.normal_(self.embedding_user.weight, std=0.1)
-            nn.init.normal_(self.embedding_item.weight, std=0.1)
-            cprint('use NORMAL distribution initilizer')
+
+        #             nn.init.xavier_uniform_(self.embedding_user.weight, gain=1)
+        #             nn.init.xavier_uniform_(self.embedding_item.weight, gain=1)
+        #             print('use xavier initilizer')
+        # random normal init seems to be a better choice when lightGCN actually don't use any non-linear activation function
+        nn.init.normal_(self.embedding_user.weight, std=0.1)
+        nn.init.normal_(self.embedding_item.weight, std=0.1)
+        cprint('use NORMAL distribution initilizer')
+
         self.f = nn.Sigmoid()
         self.Graph = self.dataset.getSparseGraph()
-        print(f"{self.args.model_name} is already to go(dropout:{self.args.dropout})🏃")
+        print(f"{self.params['name']} is already to go(dropout:{self.params['dropout']})🏃")
 
         # print("save_txt")
 
@@ -98,7 +93,7 @@ class LightGCN(BasicModel):
         all_emb = t.cat([users_emb, items_emb])
         #   t.split(all_emb , [self.n_user, self.n_item])
         embs = [all_emb]
-        if self.args.dropout:
+        if self.params['dropout']:
             if self.training:
                 print("droping")
                 g_droped = self.__dropout(self.args.keep_prob)
@@ -108,15 +103,10 @@ class LightGCN(BasicModel):
             g_droped = self.Graph
 
         for layer in range(self.layer):
-            if self.split:
-                temp_emb = []
-                for f in range(len(g_droped)):
-                    temp_emb.append(t.sparse.mm(g_droped[f], all_emb))
-                side_emb = t.cat(temp_emb, dim=0)
-            else:
-                side_emb = t.sparse.mm(g_droped, all_emb)
+            side_emb = t.sparse.mm(g_droped, all_emb)
 
-            all_emb = side_emb + all_emb if self.args.residual else side_emb
+            all_emb = side_emb + all_emb
+            # all_emb = side_emb
             embs.append(all_emb)
         embs = t.stack(embs, dim=1)
         # print(embs.size())
@@ -1445,10 +1435,10 @@ class LGCN_IDE(BasicModel):
             return torch.from_numpy(U_1)
 
 class GF_CF(BasicModel):
-    def __init__(self, args, dataset):
+    def __init__(self, params, dataset):
         super(GF_CF, self).__init__()
         self.adj_mat = dataset.R.tolil()
-        self.args = args
+        self.params = params
 
     def train(self):
         print("train GF_CF...")
@@ -1480,7 +1470,7 @@ class GF_CF(BasicModel):
         print(batch_test.shape)
         U_2 = batch_test @ norm_adj.T @ norm_adj
         # [batch, n_item] * [n_item, n_user] * [n_user, n_item] = [batch, n_item]
-        if (self.args.dataset == 'amazon-book'):
+        if (self.params['dataset'] == 'amazon-book'):
             ret = U_2
         else:
             U_1 = batch_test @ self.d_mat_i @ self.vt.T @ self.vt @ self.d_mat_i_inv

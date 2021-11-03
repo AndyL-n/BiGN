@@ -89,31 +89,6 @@ class Loader(Dataset):
         # [n_user, n_item], bipartite graph
         self.R = csr_matrix((np.ones(len(self.train_user)), (self.train_user, self.train_item)), shape=(self.n_user, self.n_item))
 
-        try:
-            self.adj_mat = sp.load_npz(self.path + '/adj_mat.npz')
-            print("successfully loaded adjacency matrix...")
-        except:
-            self.adj_mat = sp.dok_matrix((self.n_user + self.n_item, self.n_user + self.n_item), dtype=np.float32)
-            self.adj_mat = self.adj_mat.tolil()
-            R = self.R.tolil()
-            # prevent memory from overflowing
-            for i in tqdm(range(5)):
-                self.adj_mat[int(self.n_user * i / 5.0):int(self.n_user * (i + 1.0) / 5), self.n_user:] = \
-                    R[int(self.n_user * i / 5.0):int(self.n_user * (i + 1.0) / 5)]
-                self.adj_mat[self.n_user:, int(self.n_user * i / 5.0):int(self.n_user * (i + 1.0) / 5)] = \
-                    R[int(self.n_user * i / 5.0):int(self.n_user * (i + 1.0) / 5)].T
-            self.adj_mat = self.adj_mat.tocsr()
-            print('already create adjacency matrix', self.adj_mat.shape)
-            sp.save_npz(self.path + '/adj_mat.npz', self.adj_mat)
-
-        # degree
-        self.users_D = np.array(self.R.sum(axis=1)).squeeze()
-        self.items_D = np.array(self.R.sum(axis=0)).squeeze()
-
-        # A + I
-        self.users_D[self.users_D == 0.] = 1.
-        self.items_D[self.items_D == 0.] = 1.
-
         # pre-calculate
         self.all_pos = self.get_user_pos(list(range(self.n_user)))
         self.test_dict = self.build_test()
@@ -160,7 +135,6 @@ class Loader(Dataset):
             self.Graph = self.convert_sp_mat_to_sp_tensor(norm_adj)
             self.Graph = self.Graph.coalesce().to(args.device)
         return self.Graph
-
 
     def getSparseLGraph(self):
         # L = D^-1 * A
@@ -434,7 +408,6 @@ class Loader(Dataset):
             print("don't split the matrix")
         return self.social
 
-
     def build_test(self):
         """
         return:
@@ -449,17 +422,6 @@ class Loader(Dataset):
                 test_data[user] = [item]
         return test_data
 
-    # def getUserItemFeedback(self, users, items):
-    #     """
-    #     users:
-    #         shape [-1]
-    #     items:
-    #         shape [-1]
-    #     return:
-    #         feedback [-1]
-    #     """
-    #     # print(self.UserItemNet[users, items])
-    #     return np.array(self.UserItemNet[users, items]).astype('uint8').reshape((-1,))
 
     def get_user_pos(self, users):
         pos_items = []
@@ -473,7 +435,7 @@ class Loader(Dataset):
     #         negItems.append(self.allNeg[user])
     #     return negItems
 #
-dataset = Loader(path="Data/gowalla")
+# dataset = Loader(path="Data/gowalla")
 # dataset.getSimilarity()
 # print(dataset.n_user)
 # dataset.getSparseGraph()
