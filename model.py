@@ -1397,10 +1397,10 @@ class BPRMF(BasicModel):
         return self.f(scores)
 
 class LGCN_IDE(BasicModel):
-    def __init__(self, args, dataset):
+    def __init__(self, params, dataset):
         super(LGCN_IDE, self).__init__()
         self.adj_mat = dataset.R.tolil()
-        self.args = args
+        self.params = params
 
     def train(self):
         adj_mat = self.adj_mat
@@ -1428,7 +1428,7 @@ class LGCN_IDE(BasicModel):
         norm_adj = self.norm_adj
         batch_test = np.array(norm_adj[batch_users, :].todense())
         U_1 = batch_test @ norm_adj.T @ norm_adj  # [batch, n_item] * [n_item, n_user] * [n_user, n_item] = [batch, n_item]
-        if (self.args.dataset == 'gowalla'):
+        if (self.params['dataset'] == 'gowalla'):
             U_2 = U_1 @ norm_adj.T @ norm_adj  # [batch, n_item] * [n_item, n_user] * [n_user, n_item] = [batch, n_item]
             return torch.from_numpy(U_2)
         else:
@@ -1458,7 +1458,7 @@ class GF_CF(BasicModel):
         norm_adj = norm_adj.dot(d_mat)  # Du ^ -0.5 * R * Di ^ -0.5 [n_user, n_item]
 
         self.norm_adj = norm_adj.tocsc()
-        ut, s, self.vt = sparsesvd(self.norm_adj, 256)  # 奇异值分解
+        ut, s, self.vt = sparsesvd(self.norm_adj, self.params['embed_size'])  # 奇异值分解
         # [k, n_user] * [k, k] * [k, n_item]
         end = time.time()
         print('training time for GF-CF', end - start)
