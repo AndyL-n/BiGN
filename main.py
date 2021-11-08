@@ -2,20 +2,16 @@
 author: L
 date: 2021/9/6 17:07
 """
-from register import MODELS
-from dataloader import Loader
-
-
+from register import MODELS, data_param_prepare
 from utils import set_seed, minibatch, RecallPrecision_ATk, getLabel, NDCGatK_r, sample, shuffle
 import numpy as np
-import torch as t
 import pandas as pd
 from time import time, strftime, localtime
 import torch.optim as optim
-import sys
+import torch as t
+import torch
 import os
 import argparse
-import configparser
 
 def test_one_user(X, topks):
     sorted_items = X[0].numpy()
@@ -112,39 +108,12 @@ def Test(dataset, model, params):
         # results['auc'] = np.mean(auc_record)
         return results
 
-def data_param_prepare(model, dataset):
-    config = configparser.ConfigParser()
-    config.read('params/' + model + '_' + dataset + '_config.ini')
-    print('params/' + model + '_' + dataset + '_config.ini')
-    all_dataset = ['amazon-book', 'gowalla', 'ml-1m', 'ml-10m', 'ml-20m', 'ml-25m', 'ml-100k', 'pinterest', 'yelp2018']
-    params = {}
-    params['name'] = config['Model']['name']
-    params['dataset'] = config['Training']['dataset']
-    GPU = t.cuda.is_available()
-    device = t.device('cuda' if GPU else "cpu")
-    params['device'] = device
-    # if model == 'GC_CF':
 
-
-    params['embed_size'] = config.getint('Model', 'embedding_dim')
-    # params['layer'] = config.getint('Model', 'layers')
-    params['test_batch_size'] = config.getint('Testing', 'test_batch_size')
-    params['topk'] = config.getint('Testing', 'topk')
-    # params['lr'] = config.getfloat('Training', 'lea2rning_rate')
-    # params['seed'] = config.getint('Model', 'seed')
-    # params['dropout'] = config.getint('Model', 'dropout')
-
-
-    if params['dataset'] in all_dataset:
-        dataset = Loader(path="Data/" + params['dataset'])
-    else:
-        sys.exit("No such file or directory:" + params['dataset'])
-    return params, dataset
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--model', default='GF_CF', type=str)
-    parser.add_argument('--dataset', default='gowalla', type=str)
+    parser.add_argument('--dataset', default='ml-1m', type=str)
     args = parser.parse_args()
     params, dataset = data_param_prepare(args.model, args.dataset)
     model = params['name']

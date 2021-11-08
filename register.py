@@ -1,4 +1,9 @@
 import model
+from dataloader import Loader
+import configparser
+import sys
+import torch as t
+from sys import exit
 
 MODELS = {
     'BiGN': model.BiGN,
@@ -42,3 +47,32 @@ MODELS = {
     'GF_CF': model.GF_CF,
     'LGCN_IDE': model.LGCN_IDE,
 }
+
+def data_param_prepare(model, dataset):
+    config = configparser.ConfigParser()
+    config.read('params/' + model + '_' + dataset + '_config.ini')
+    print('params/' + model + '_' + dataset + '_config.ini')
+    all_dataset = ['amazon-book', 'gowalla', 'ml-1m', 'ml-10m', 'ml-20m', 'ml-25m', 'ml-100k', 'pinterest', 'yelp2018']
+    params = {}
+    params['name'] = config['Model']['name']
+    params['dataset'] = dataset
+    GPU = t.cuda.is_available()
+    device = t.device('cuda' if GPU else "cpu")
+    params['device'] = device
+    # if model == 'GC_CF':
+
+
+    params['embed_size'] = config.getint('Model', 'embedding_dim')
+    # params['layer'] = config.getint('Model', 'layers')
+    params['test_batch_size'] = config.getint('Testing', 'test_batch_size')
+    params['topk'] = config.getint('Testing', 'topk')
+    # params['lr'] = config.getfloat('Training', 'lea2rning_rate')
+    # params['seed'] = config.getint('Model', 'seed')
+    # params['dropout'] = config.getint('Model', 'dropout')
+
+
+    if params['dataset'] in all_dataset:
+        dataset = Loader(path="Data/" + params['dataset'])
+    else:
+        sys.exit("No such file or directory:" + params['dataset'])
+    return params, dataset
