@@ -20,7 +20,7 @@ class Loader(Dataset):
     gowalla dataset
     """
 
-    def __init__(self, path="Data/gowalla"):
+    def __init__(self, path="./Data/gowalla"):
         # train or test
         cprint(f'loading [{path}]')
         self.path = path
@@ -330,18 +330,65 @@ class Loader(Dataset):
             pos_items.append(self.R[user].nonzero()[1])
         return pos_items
 
-    # def getUserNegItems(self, users):
-    #     negItems = []
-    #     for user in users:
-    #         negItems.append(self.allNeg[user])
-    #     return negItems
+    # def get_item_similarity(self):
 
-dataset = Loader(path="Data/gowalla")
+    def get_user_similarity(self):
+        R = self.R.dot(self.R.T)
+        print(len(R.nonzero()[0]))
+        #item_user 倒排表
+        item_users = {}
+        for user,item in enumerate(self.all_pos):
+            for i in item:
+                if i not in item_users:
+                    item_users[i] = set()
+                item_users[i].add(user)
+
+        # 有共同浏览记录的用户的重合度
+        # user_mat = sp.dok_matrix((self.n_user, self.n_user), dtype=np.float32)
+        # user_mat[0,0] = 1
+        # print(user_mat)
+        # print(user_mat.shape)
+        Sim = {} # C(u,v)
+        user_user = {}
+        for item, user_set in tqdm(item_users.items()):
+            ppl = len(user_set)
+            users = sorted(list(user_set))
+            for i in range(ppl):
+
+                Sim[users[i]] = {} if users[i] not in Sim else Sim[users[i]]
+                for j in range(i,ppl):
+                    tmp = 0 if users[j] not in Sim[users[i]] else Sim[users[i]][users[j]]
+                    tmp += 1 / np.log(1 + ppl)
+                    Sim[users[i]][users[j]] = tmp
+                    # user_mat[int(users[i]),int(users[j])] = tmp
+                    # user_mat[int(users[j]),int(users[i])] = tmp
+
+        users, neighbors, scores = [], [], []
+        for user,neighbor_users in tqdm(Sim.items()):
+            # print(user, neighbor_users)
+            for neighbor_user, score in neighbor_users.items():
+                if score != 0:
+                    users.append(user)
+                    neighbors.append(neighbor_user)
+                    scores.append(score)
+
+        print(len(users))
+        users, neighbors, scores = np.array(users), np.array(neighbors), np.array(scores)
+        self.user_sim = csr_matrix((np.ones(len(self.train_user)), (self.train_user, self.train_item)),shape=(self.n_user, self.n_item))
+        exit()
+        print(user_mat)
+        import pandas
+        df = pandas.DataFrame(Sim).T.fillna(0)
+        print(df.head())
+        exit()
+        return
+
+dataset = Loader(path="../Data/gowalla")
 # dataset.getSimilarity()
 # print(dataset.n_user)
 # dataset.getSparseGraph()
 # # dataset.getSparseRGraph()
 # print(dataset.all_pos[0])
-dataset.getSocial()
-print(dataset.social)
+dataset.get_user_similarity()
+# print(dataset.social)
 # data = sp.load_npz(self.path + '/adj_social_mat.npz')
