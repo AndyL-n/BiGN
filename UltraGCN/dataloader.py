@@ -333,55 +333,111 @@ class Loader(Dataset):
     # def get_item_similarity(self):
 
     def get_user_similarity(self):
-        R = self.R.dot(self.R.T)
-        print(len(R.nonzero()[0]))
-        #item_user 倒排表
-        item_users = {}
-        for user,item in enumerate(self.all_pos):
-            for i in item:
-                if i not in item_users:
-                    item_users[i] = set()
-                item_users[i].add(user)
+        print("loading all user similarity matrix")
+        try:
+            user_sim = sp.load_npz(self.path + '/user_similarity_mat.npz')
+            print("successfully loaded all user similarity matrix...")
+        except:
+            #item_user 倒排表
+            item_users = {}
+            for user,item in enumerate(self.all_pos):
+                for i in item:
+                    if i not in item_users:
+                        item_users[i] = set()
+                    item_users[i].add(user)
 
-        # 有共同浏览记录的用户的重合度
-        # user_mat = sp.dok_matrix((self.n_user, self.n_user), dtype=np.float32)
-        # user_mat[0,0] = 1
-        # print(user_mat)
-        # print(user_mat.shape)
-        Sim = {} # C(u,v)
-        user_user = {}
-        for item, user_set in tqdm(item_users.items()):
-            ppl = len(user_set)
-            users = sorted(list(user_set))
-            for i in range(ppl):
+            # 有共同浏览记录的用户的重合度
+            # user_mat = sp.dok_matrix((self.n_user, self.n_user), dtype=np.float32)
+            # user_mat[0,0] = 1
+            # print(user_mat)
+            # print(user_mat.shape)
+            Sim = {} # C(u,v)
+            user_user = {}
+            for item, user_set in tqdm(item_users.items()):
+                ppl = len(user_set)
+                users = sorted(list(user_set))
+                for i in range(ppl):
 
-                Sim[users[i]] = {} if users[i] not in Sim else Sim[users[i]]
-                for j in range(i,ppl):
-                    tmp = 0 if users[j] not in Sim[users[i]] else Sim[users[i]][users[j]]
-                    tmp += 1 / np.log(1 + ppl)
-                    Sim[users[i]][users[j]] = tmp
-                    # user_mat[int(users[i]),int(users[j])] = tmp
-                    # user_mat[int(users[j]),int(users[i])] = tmp
+                    Sim[users[i]] = {} if users[i] not in Sim else Sim[users[i]]
+                    for j in range(i+1,ppl):
+                        tmp = 0 if users[j] not in Sim[users[i]] else Sim[users[i]][users[j]]
+                        tmp += 1 / np.log(1 + ppl)
+                        Sim[users[i]][users[j]] = tmp
+                        # user_mat[int(users[i]),int(users[j])] = tmp
+                        # user_mat[int(users[j]),int(users[i])] = tmp
 
-        users, neighbors, scores = [], [], []
-        for user,neighbor_users in tqdm(Sim.items()):
-            # print(user, neighbor_users)
-            for neighbor_user, score in neighbor_users.items():
-                if score != 0:
-                    users.append(user)
-                    neighbors.append(neighbor_user)
-                    scores.append(score)
+            users, neighbors, scores = [], [], []
+            for user,neighbor_users in tqdm(Sim.items()):
+                # print(user, neighbor_users)
+                for neighbor_user, score in neighbor_users.items():
+                    if score != 0:
+                        users.append(user)
+                        neighbors.append(neighbor_user)
+                        scores.append(score)
 
-        print(len(users))
-        users, neighbors, scores = np.array(users), np.array(neighbors), np.array(scores)
-        self.user_sim = csr_matrix((np.ones(len(self.train_user)), (self.train_user, self.train_item)),shape=(self.n_user, self.n_item))
-        exit()
-        print(user_mat)
-        import pandas
-        df = pandas.DataFrame(Sim).T.fillna(0)
-        print(df.head())
-        exit()
-        return
+
+            tmp = users + neighbors
+            neighbors.extend(users)
+            users = tmp
+            scores = scores * 2
+            print(len(users), len(neighbors), len(scores))
+            users, neighbors, scores = np.array(users), np.array(neighbors), np.array(scores)
+            user_sim = csr_matrix((scores, (users, neighbors)),shape=(self.n_user, self.n_user))
+            # self.user_sim = self.user_sim + sp.eye(self.n_user, self.n_user)
+            rowsum = np.array(self.R.sum(axis=1))
+            d_inv = np.power(rowsum, -0.5).flatten()
+            d_inv[np.isinf(d_inv)] = 0.
+            d_mat = sp.diags(d_inv)
+            print(len(rowsum))
+            user_sim = d_mat.dot(user_sim).dot(d_mat)
+            sp.save_npz(self.path + '/user_similarity_mat.npz', user_sim)
+            print("successfully generated all user similarity matrix...")
+        return user_sim
+
+    def get_item_similarity(self):
+        print("loading all item similarity matrix")
+        try:
+            item_sim = sp.load_npz(self.path + '/item_similarity_mat.npz')
+            print("successfully loaded all item similarity matrix...")
+        except:
+            # item_user 倒排表
+            item_users = {}
+            Sim = {}  # C(u,v)
+            for user, items in enumerate(tqdm(self.all_pos)):
+                ppl = len(items)
+                for i in range(ppl):
+                    Sim[items[i]] = {} if items[i] not in Sim else Sim[items[i]]
+                    for j in range(i + 1, ppl):
+                        tmp = 0 if items[j] not in Sim[items[i]] else Sim[items[i]][items[j]]
+                        tmp += 1 / np.log(1 + ppl)
+                        Sim[items[i]][items[j]] = tmp
+
+            items, neighbors, scores = [], [], []
+            for item, neighbor_items in tqdm(Sim.items()):
+                # print(user, neighbor_users)
+                for neighbor_item, score in neighbor_items.items():
+                    if score != 0:
+                        items.append(item)
+                        neighbors.append(neighbor_item)
+                        scores.append(score)
+
+            tmp = items + neighbors
+            neighbors.extend(items)
+            items = tmp
+            scores = scores * 2
+            print(len(items), len(neighbors), len(scores))
+            items, neighbors, scores = np.array(items), np.array(neighbors), np.array(scores)
+            item_sim = csr_matrix((scores, (items, neighbors)), shape=(self.n_item, self.n_item))
+            # self.user_sim = self.user_sim + sp.eye(self.n_user, self.n_user)
+            rowsum = np.array(self.R.T.sum(axis=1))
+            d_inv = np.power(rowsum, -0.5).flatten()
+            d_inv[np.isinf(d_inv)] = 0.
+            d_mat = sp.diags(d_inv)
+            # print(len(rowsum))
+            item_sim = d_mat.dot(item_sim).dot(d_mat)
+            sp.save_npz(self.path + '/item_similarity_mat.npz', item_sim)
+            print("successfully generated all item similarity matrix...")
+        return item_sim
 
 dataset = Loader(path="../Data/gowalla")
 # dataset.getSimilarity()
@@ -389,6 +445,6 @@ dataset = Loader(path="../Data/gowalla")
 # dataset.getSparseGraph()
 # # dataset.getSparseRGraph()
 # print(dataset.all_pos[0])
-dataset.get_user_similarity()
+# dataset.get_item_similarity()
 # print(dataset.social)
 # data = sp.load_npz(self.path + '/adj_social_mat.npz')
