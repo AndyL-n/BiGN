@@ -40,34 +40,55 @@ class PairWiseModel(BasicModel):
         raise NotImplementedError
 
 class UltraGCN(PairWiseModel):
-    def __init__(self, params, constraint_mat, ii_constraint_mat, ii_neighbor_mat):
+    def __init__(self, params, dataset):
         super(UltraGCN, self).__init__()
-        self.user_num = params['user_num']
-        self.item_num = params['item_num']
-        self.embedding_dim = params['embedding_dim']
-        self.w1 = params['w1']
-        self.w2 = params['w2']
-        self.w3 = params['w3']
-        self.w4 = params['w4']
+        self.params = params
+        self.dataset = dataset
+        self.__init_weight()
 
-        self.negative_weight = params['negative_weight']
-        self.gamma = params['gamma']
-        self.lambda_ = params['lambda']
+    def __init_weight(self):
+        self.n_user = self.dataset.n_user
+        self.n_item = self.dataset.n_item
+        self.embed_size = self.params['embed_size']
+        # self.layer = self.params['layer']
+        self.embedding_user = nn.Embedding(num_embeddings=self.n_user, embedding_dim=self.embed_size)
+        self.embedding_item = nn.Embedding(num_embeddings=self.n_item, embedding_dim=self.embed_size)
 
-        self.user_embeds = nn.Embedding(self.user_num, self.embedding_dim)
-        self.item_embeds = nn.Embedding(self.item_num, self.embedding_dim)
+        #             nn.init.xavier_uniform_(self.embedding_user.weight, gain=1)
+        #             nn.init.xavier_uniform_(self.embedding_item.weight, gain=1)
+        #             print('use xavier initilizer')
+        # random normal init seems to be a better choice when lightGCN actually don't use any non-linear activation function
+        nn.init.normal_(self.embedding_user.weight, std=0.1)
+        nn.init.normal_(self.embedding_item.weight, std=0.1)
+        cprint('use NORMAL distribution initilizer')
 
-        self.constraint_mat = constraint_mat
-        self.ii_constraint_mat = ii_constraint_mat
-        self.ii_neighbor_mat = ii_neighbor_mat
+        self.f = nn.Sigmoid()
+        self.Graph = self.dataset.getSparseGraph()
+        print(f"{self.params['name']} is already to go(dropout:{self.params['dropout']})🏃")
 
-        self.initial_weight = params['initial_weight']
+        # print("save_txt")
 
-        self.initial_weights()
-
-    def initial_weights(self):
-        nn.init.normal_(self.user_embeds.weight, std=self.initial_weight)
-        nn.init.normal_(self.item_embeds.weight, std=self.initial_weight)
+        # super(UltraGCN, self).__init__()
+        # self.user_num = params['user_num']
+        # self.item_num = params['item_num']
+        # self.embedding_dim = params['embedding_dim']
+        # self.w1 = params['w1']
+        # self.w2 = params['w2']
+        # self.w3 = params['w3']
+        # self.w4 = params['w4']
+        #
+        # self.negative_weight = params['negative_weight']
+        # self.gamma = params['gamma']
+        # self.lambda_ = params['lambda']
+        #
+        # self.user_embeds = nn.Embedding(self.user_num, self.embedding_dim)
+        # self.item_embeds = nn.Embedding(self.item_num, self.embedding_dim)
+        #
+        # self.constraint_mat = constraint_mat
+        # self.ii_constraint_mat = ii_constraint_mat
+        # self.ii_neighbor_mat = ii_neighbor_mat
+        #
+        # self.initial_weight = params['initial_weight']
 
     def get_omegas(self, users, pos_items, neg_items):
         device = self.get_device()

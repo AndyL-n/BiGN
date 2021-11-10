@@ -330,8 +330,6 @@ class Loader(Dataset):
             pos_items.append(self.R[user].nonzero()[1])
         return pos_items
 
-    # def get_item_similarity(self):
-
     def get_user_similarity(self):
         print("loading all user similarity matrix")
         try:
