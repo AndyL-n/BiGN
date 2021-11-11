@@ -2,15 +2,23 @@
 author: L
 date: 2021/11/9 15:28
 """
-from UltraGCN.dataloader import dataset
-from UltraGCN.model import UltraGCN
+from UltraGCN.dataloader import Loader
+from UltraGCN.model import SimGCN
+import torch
 if __name__ == "__main__":
 
     params = {}
     params['embed_size'] = 64
-    params['name'] = 'UltraGCN'
+    params['name'] = 'SimGCN'
     params['dropout'] = 0
-    model = UltraGCN(params, dataset)
+    params['negative_num'] = 10
+    params['neighbor_num'] = 10
+    dataset = Loader(path="../Data/gowalla")
+    model = SimGCN(params, dataset)
+    model.get_weight()
+    user = torch.tensor([1]).long()
+    print(user)
+    model.forward()
     # ultragcn = ultragcn.to(params['device'])
     # optimizer = torch.optim.Adam(ultragcn.parameters(), lr=params['lr'])
     #

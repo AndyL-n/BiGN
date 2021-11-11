@@ -77,6 +77,7 @@ class Loader(Dataset):
         self.Graph = None
         self.LGraph = None
         self.RGraph = None
+        self.DGraph = None
         self.similarity = None
         self.social= None
 
@@ -89,6 +90,22 @@ class Loader(Dataset):
         # [n_user, n_item], bipartite graph
         self.R = csr_matrix((np.ones(len(self.train_user)), (self.train_user, self.train_item)), shape=(self.n_user, self.n_item))
 
+        try:
+            self.adj_mat = sp.load_npz(self.path + '/adj_mat.npz')
+            print("successfully loaded adjacency matrix...")
+        except:
+            self.adj_mat = sp.dok_matrix((self.n_user + self.n_item, self.n_user + self.n_item), dtype=np.float32)
+            self.adj_mat = self.adj_mat.tolil()
+            R = self.R.tolil()
+            # prevent memory from overflowing
+            for i in tqdm(range(5)):
+                self.adj_mat[int(self.n_user * i / 5.0):int(self.n_user * (i + 1.0) / 5), self.n_user:] = \
+                    R[int(self.n_user * i / 5.0):int(self.n_user * (i + 1.0) / 5)]
+                self.adj_mat[self.n_user:, int(self.n_user * i / 5.0):int(self.n_user * (i + 1.0) / 5)] = \
+                    R[int(self.n_user * i / 5.0):int(self.n_user * (i + 1.0) / 5)].T
+            self.adj_mat = self.adj_mat.tocsr()
+            print('already create adjacency matrix', self.adj_mat.shape)
+            sp.save_npz(self.path + '/adj_mat.npz', self.adj_mat)
         # pre-calculate
         self.all_pos = self.get_user_pos(list(range(self.n_user)))
         self.test_dict = self.build_test()
@@ -199,6 +216,43 @@ class Loader(Dataset):
             self.RGraph = self.RGraph.coalesce().to(args.device)
             print("don't split the matrix")
         return self.RGraph
+
+    def getSparseDGraph(self):
+
+        print("loading deep matrix")
+        if self.DGraph is None:
+            try:
+                pre_adj_mat = sp.load_npz(self.path + '/deep_mat.npz')
+                print("successfully loaded deep matrix...")
+                norm_adj = pre_adj_mat
+            except:
+                print("generating deep matrix")
+                s = time()
+
+                adj_mat = self.adj_mat.todok()
+                # L = D^-0.5 * (A + I) * D^-0.5
+                # adj_mat = adj_mat + sp.eye(adj_mat.shape[0])
+                # L = D^-0.5 * A * D^-0.5
+                rowsum = np.array(adj_mat.sum(axis=1))
+                rowsqrt = np.sqrt(rowsum + 1)
+                d_inv_u = (rowsqrt / rowsum).flatten()
+                d_inv_v = np.power(rowsqrt, -1).flatten()
+                d_inv_u[np.isinf(d_inv_u)] = 0.
+                d_inv_v[np.isinf(d_inv_v)] = 0.
+                d_mat_u = sp.diags(d_inv_u)
+                d_mat_v = sp.diags(d_inv_v)
+
+                norm_adj = d_mat_u.dot(adj_mat)
+                norm_adj = norm_adj.dot(d_mat_v)
+                norm_adj = norm_adj.tocsr()
+
+                end = time()
+                print(f"costing {end - s}s, saved deep_mat...")
+                sp.save_npz(self.path + '/deep_mat.npz', norm_adj)
+
+            self.DGraph = self.convert_sp_mat_to_sp_tensor(norm_adj)
+            self.DGraph = self.DGraph.coalesce().to(args.device)
+        return self.DGraph
 
     def getSimilarity(self):
         print("loading similarity matrix")
@@ -437,7 +491,7 @@ class Loader(Dataset):
             print("successfully generated all item similarity matrix...")
         return item_sim
 
-dataset = Loader(path="../Data/gowalla")
+# dataset = Loader(path="../Data/gowalla")
 # dataset.getSimilarity()
 # print(dataset.n_user)
 # dataset.getSparseGraph()

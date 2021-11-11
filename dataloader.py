@@ -92,6 +92,7 @@ class Loader(Dataset):
         # pre-calculate
         self.all_pos = self.get_user_pos(list(range(self.n_user)))
         self.test_dict = self.build_test()
+
         print(f"{args.dataset} is ready to go🏃")
 
     def convert_sp_mat_to_sp_tensor(self, X):
@@ -199,6 +200,103 @@ class Loader(Dataset):
             self.RGraph = self.RGraph.coalesce().to(args.device)
             print("don't split the matrix")
         return self.RGraph
+
+    def normalization(self, similarity):
+        E = sp.eye(similarity.shape[0])
+        similarity = similarity - E
+        print(f"{args.normalization} normalization")
+        try:
+            similarity = sp.load_npz(self.path + '/similarity_mat_sample_' + str(args.neighbor) + '_' + args.normalization + '.npz')
+            print(f"successfully loaded similarity(sample{args.neighbor})_{args.normalization}...")
+        except:
+            s = time()
+            if args.normalization == 'symmetric':
+                print("generating symmetric normalization")
+                adj_mat = csr_matrix((np.array([1 for _ in range(len(similarity.data))]), similarity.nonzero()), shape=similarity.shape)
+                rowsum = np.array(adj_mat.sum(axis=1))
+                d_inv = np.power(rowsum, -0.5).flatten()
+                d_inv[np.isinf(d_inv)] = 0.
+                d_mat = sp.diags(d_inv)
+
+                similarity = d_mat.dot(adj_mat)
+                similarity = similarity.dot(d_mat)
+                similarity.sort_indices()
+                sp.save_npz(self.path + '/similarity_mat_sample_' + str(args.neighbor) + '_' + args.normalization + '.npz', similarity)
+
+            elif args.normalization == 'connect_symmetric':
+                print("generating connect_symmetric normalization")
+                adj_mat = self.adj_mat.tocsr()
+                adj_mat = adj_mat + csr_matrix((np.array([1 for _ in range(len(similarity.data))]), similarity.nonzero()),shape=similarity.shape)
+
+                adj_mat = adj_mat.todok()
+
+                rowsum = np.array(adj_mat.sum(axis=1))
+                d_inv = np.power(rowsum, -1).flatten()
+                d_inv[np.isinf(d_inv)] = 0.
+                d_mat = sp.diags(d_inv)
+
+                norm_adj = d_mat.dot(adj_mat)
+                norm_adj = norm_adj.dot(d_mat)
+                similarity = norm_adj.tocsr()
+
+                sp.save_npz(self.path + '/similarity_mat_sample_' + str(args.neighbor) + '_' + args.normalization + '.npz',similarity)
+
+            elif args.normalization == 'sotfmax':
+                print("generating sotfmax normalization")
+
+                similarity.data = np.exp(similarity.data)
+                rowsum = np.array(similarity.sum(axis=1))
+
+                d_inv = np.power(rowsum, -1).flatten()
+                d_inv[np.isinf(d_inv)] = 0.
+                d_mat = sp.diags(d_inv)
+                d_mat = d_mat.tocsr()
+
+                similarity = d_mat.dot(similarity)
+                similarity.sort_indices()
+                sp.save_npz(self.path + '/similarity_mat_sample_' + str(args.neighbor) + '_' + args.normalization + '.npz', similarity)
+
+            elif args.normalization == 'min_max':
+                print("generating min_max normalization")
+                rowmax = np.array(similarity.max(axis=1).data)
+                print(rowmax)
+                d_inv = np.power(rowmax, -1).flatten()
+                d_inv[np.isinf(d_inv)] = 0.
+                d_mat = sp.diags(d_inv)
+                d_mat = d_mat.tocsr()
+                print(d_mat)
+                similarity = d_mat.dot(similarity)
+                similarity.sort_indices()
+                sp.save_npz(self.path + '/similarity_mat_sample_' + str(args.neighbor) + '_' + args.normalization + '.npz', similarity)
+
+            elif args.normalization == 'min_max&sotfmax':
+                print("generating min_max&sotfmax normalization")
+                rowmax = np.array(similarity.max(axis=1).data)
+                d_inv = np.power(rowmax, -1).flatten()
+                d_inv[np.isinf(d_inv)] = 0.
+                d_mat = sp.diags(d_inv)
+                d_mat = d_mat.tocsr()
+                similarity = d_mat.dot(similarity)
+
+                similarity.data = np.exp(similarity.data)
+                rowsum = np.array(similarity.sum(axis=1))
+
+                d_inv = np.power(rowsum, -1).flatten()
+                d_inv[np.isinf(d_inv)] = 0.
+                d_mat = sp.diags(d_inv)
+                d_mat = d_mat.tocsr()
+
+                similarity = d_mat.dot(similarity)
+                similarity.sort_indices()
+                sp.save_npz(self.path + '/similarity_mat_sample_' + str(args.neighbor) + '_' + args.normalization + '.npz', similarity)
+
+            else:
+                print("don't normalize the similarity matrix")
+
+            end = time()
+            print(f"costing {end - s}s, normalization similarity...")
+
+        return similarity.tocsr()
 
     def getSimilarity(self):
         print("loading similarity matrix")
@@ -324,6 +422,7 @@ class Loader(Dataset):
                 test_data[user] = [item]
         return test_data
 
+
     def get_user_pos(self, users):
         pos_items = []
         for user in users:
@@ -335,13 +434,12 @@ class Loader(Dataset):
     #     for user in users:
     #         negItems.append(self.allNeg[user])
     #     return negItems
-
-dataset = Loader(path="Data/gowalla")
+#
+# dataset = Loader(path="Data/gowalla")
 # dataset.getSimilarity()
 # print(dataset.n_user)
 # dataset.getSparseGraph()
 # # dataset.getSparseRGraph()
 # print(dataset.all_pos[0])
-dataset.getSocial()
-print(dataset.social)
+# dataset.getSocial()
 # data = sp.load_npz(self.path + '/adj_social_mat.npz')

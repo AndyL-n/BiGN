@@ -39,9 +39,9 @@ class PairWiseModel(BasicModel):
         """
         raise NotImplementedError
 
-class UltraGCN(PairWiseModel):
+class SimGCN(PairWiseModel):
     def __init__(self, params, dataset):
-        super(UltraGCN, self).__init__()
+        super(SimGCN, self).__init__()
         self.params = params
         self.dataset = dataset
         self.__init_weight()
@@ -50,98 +50,60 @@ class UltraGCN(PairWiseModel):
         self.n_user = self.dataset.n_user
         self.n_item = self.dataset.n_item
         self.embed_size = self.params['embed_size']
-        # self.layer = self.params['layer']
         self.embedding_user = nn.Embedding(num_embeddings=self.n_user, embedding_dim=self.embed_size)
         self.embedding_item = nn.Embedding(num_embeddings=self.n_item, embedding_dim=self.embed_size)
+        self.neighbor_num = self.params['neighbor_num']
 
-        #             nn.init.xavier_uniform_(self.embedding_user.weight, gain=1)
-        #             nn.init.xavier_uniform_(self.embedding_item.weight, gain=1)
-        #             print('use xavier initilizer')
-        # random normal init seems to be a better choice when lightGCN actually don't use any non-linear activation function
+        self.item_sim_neighbor, self.item_sim_weight = self.get_item_mat()
+        self.user_sim_neighbor, self.user_sim_weight = self.get_user_mat()
         nn.init.normal_(self.embedding_user.weight, std=0.1)
         nn.init.normal_(self.embedding_item.weight, std=0.1)
         cprint('use NORMAL distribution initilizer')
 
         self.f = nn.Sigmoid()
-        self.Graph = self.dataset.getSparseGraph()
+        self.Graph = self.dataset.getSparseDGraph()
+        print(self.Graph)
         print(f"{self.params['name']} is already to go(dropout:{self.params['dropout']})🏃")
 
-        # print("save_txt")
+    def get_item_mat(self):
+        weight_mat = torch.zeros((self.n_item, self.neighbor_num))
+        neighbor_mat = torch.zeros((self.n_item, self.neighbor_num))
+        item_sim = self.dataset.get_item_similarity()
+        for i in range(self.n_item):
+            row = torch.from_numpy(item_sim.getrow(i).toarray()[0])
+            row_sim, row_idx = torch.topk(row, self.neighbor_num)
+            weight_mat[i] = row_sim
+            neighbor_mat[i] = row_idx
 
-        # super(UltraGCN, self).__init__()
-        # self.user_num = params['user_num']
-        # self.item_num = params['item_num']
-        # self.embedding_dim = params['embedding_dim']
-        # self.w1 = params['w1']
-        # self.w2 = params['w2']
-        # self.w3 = params['w3']
-        # self.w4 = params['w4']
-        #
-        # self.negative_weight = params['negative_weight']
-        # self.gamma = params['gamma']
-        # self.lambda_ = params['lambda']
-        #
-        # self.user_embeds = nn.Embedding(self.user_num, self.embedding_dim)
-        # self.item_embeds = nn.Embedding(self.item_num, self.embedding_dim)
-        #
-        # self.constraint_mat = constraint_mat
-        # self.ii_constraint_mat = ii_constraint_mat
-        # self.ii_neighbor_mat = ii_neighbor_mat
-        #
-        # self.initial_weight = params['initial_weight']
+        print(f"successfully sample {self.neighbor_num} item neighbor")
+        return neighbor_mat.long(), weight_mat.float()
 
-    def get_omegas(self, users, pos_items, neg_items):
-        device = self.get_device()
-        if self.w2 > 0:
-            pos_weight = self.constraint_mat[users * self.item_num + pos_items].to(device)
-            pos_weight = self.w1 + self.w2 * pos_weight
-        else:
-            pos_weight = self.w1 * torch.ones(len(pos_items)).to(device)
+    def get_user_mat(self):
+        weight_mat = torch.zeros((self.n_user, self.neighbor_num))
+        neighbor_mat = torch.zeros((self.n_user, self.neighbor_num))
+        user_sim = self.dataset.get_user_similarity()
+        for i in range(self.n_user):
+            row = torch.from_numpy(user_sim.getrow(i).toarray()[0])
+            row_sim, row_idx = torch.topk(row, self.neighbor_num)
+            weight_mat[i] = row_sim
+            neighbor_mat[i] = row_idx
 
-        users = (users * self.item_num).unsqueeze(0)
-        if self.w4 > 0:
-            neg_weight = self.constraint_mat[
-                torch.cat([users] * neg_items.size(1)).transpose(1, 0) + neg_items].flatten().to(device)
-            neg_weight = self.w3 + self.w4 * neg_weight
-        else:
-            neg_weight = self.w3 * torch.ones(neg_items.size(0) * neg_items.size(1)).to(device)
+        print(f"successfully sample {self.neighbor_num} user neighbor")
+        return neighbor_mat.long(), weight_mat.float()
 
-        weight = torch.cat((pos_weight, neg_weight))
-        return weight
-
-    def cal_loss_L(self, users, pos_items, neg_items, omega_weight):
-        device = self.get_device()
-        user_embeds = self.user_embeds(users)
-        pos_embeds = self.item_embeds(pos_items)
-        neg_embeds = self.item_embeds(neg_items)
-
-        pos_scores = (user_embeds * pos_embeds).sum(dim=-1)  # batch_size
-        user_embeds = user_embeds.unsqueeze(1)
-        neg_scores = (user_embeds * neg_embeds).sum(dim=-1)  # batch_size * negative_num
-
-        neg_labels = torch.zeros(neg_scores.size()).to(device)
-        neg_loss = F.binary_cross_entropy_with_logits(neg_scores, neg_labels,
-                                                      weight=omega_weight[len(pos_scores):].view(neg_scores.size()),
-                                                      reduction='none').mean(dim=-1)
-
-        pos_labels = torch.ones(pos_scores.size()).to(device)
-        pos_loss = F.binary_cross_entropy_with_logits(pos_scores, pos_labels, weight=omega_weight[:len(pos_scores)],
-                                                      reduction='none')
-
-        loss = pos_loss + neg_loss * self.negative_weight
-
-        return loss.sum()
-
-    def cal_loss_I(self, users, pos_items):
-        device = self.get_device()
-        neighbor_embeds = self.item_embeds(self.ii_neighbor_mat[pos_items].to(device))  # len(pos_items) * num_neighbors * dim
-        sim_scores = self.ii_constraint_mat[pos_items].to(device)  # len(pos_items) * num_neighbors
-        user_embeds = self.user_embeds(users).unsqueeze(1)
-
-        loss = -sim_scores * (user_embeds * neighbor_embeds).sum(dim=-1).sigmoid().log()
-
-        # loss = loss.sum(-1)
-        return loss.sum()
+    def computer(self):
+        users_emb = self.embedding_user.weight
+        items_emb = self.embedding_item.weight
+        emb = torch.cat([users_emb, items_emb])
+        user_neighbor = self.embedding_user(self.user_sim_neighbor) # [n_user, neighor_num, emb_dim]
+        user_neighbor_emb = (user_neighbor * self.user_sim_weight.unsqueeze(2)).sum(dim=1)
+        item_neighbor = self.embedding_item(self.item_sim_neighbor)
+        item_neighbor_emb = (item_neighbor * self.item_sim_weight.unsqueeze(2)).sum(dim=1)
+        neighbor_emb = torch.cat([user_neighbor_emb, item_neighbor_emb])
+        all_emb = torch.mm(self.Graph, emb)
+        emb = emb + neighbor_emb + all_emb
+        users, items = t.split(emb, [self.n_user, self.n_item])
+        return users, items
 
     def norm_loss(self):
         loss = 0.0
@@ -149,25 +111,73 @@ class UltraGCN(PairWiseModel):
             loss += torch.sum(parameter ** 2)
         return loss / 2
 
-    def forward(self, users, pos_items, neg_items):
-        print(users.shape)
-        print(pos_items.shape)
-        print(neg_items.shape)
-
-        omega_weight = self.get_omegas(users.long(), pos_items.long(), neg_items.long())
-        print(omega_weight.shape)
-        exit()
-        loss = self.cal_loss_L(users, pos_items, neg_items, omega_weight)
-        loss += self.gamma * self.norm_loss()
-        loss += self.lambda_ * self.cal_loss_I(users, pos_items)
+    def bpr_loss(self, user, pos, neg):
+        user_emb, item_emb = self.computer()
+        loss = self.get_loss(user, pos, neg, user_emb, item_emb)
+        reg_loss = self.norm_loss()
+        loss = loss + self.decay * reg_loss
         return loss
 
-    def test_foward(self, users):
-        items = torch.arange(self.item_num).to(users.device)
-        user_embeds = self.user_embeds(users)
-        item_embeds = self.item_embeds(items)
+    def get_loss(self, user, pos, neg, user_emb, item_emb):
+        device = self.get_device()
+        user_embeds = user_emb[user]
+        pos_embeds = item_emb[pos]
+        neg_embeds = item_emb[neg]
+        weight = self.get_weight(user, pos, neg)
 
-        return user_embeds.mm(item_embeds.t())
+        pos_scores = (user_embeds * pos_embeds).sum(dim=-1)
+        pos_labels = torch.ones(pos_scores.size()).to(device)
+        pos_loss = F.binary_cross_entropy_with_logits(pos_scores, pos_labels, weight=weight[:len(pos_scores)],reduction='none')
 
-    def get_device(self):
-        return self.user_embeds.weight.device
+        user_embeds = user_embeds.unsqueeze(1)
+        neg_scores = (user_embeds * neg_embeds).sum(dim=-1)
+        neg_labels = torch.zeros(neg_scores.size()).to(device)
+        neg_loss = F.binary_cross_entropy_with_logits(neg_scores, neg_labels,
+                                                      weight=weight[len(pos_scores):].view(neg_scores.size()),
+                                                      reduction='none').mean(dim=-1)
+
+        loss = pos_loss + neg_loss * self.negative_weight
+
+        return loss.sum()
+
+    def get_weight(self):
+        mat = self.Graph[self.n_user:][:self.n_item]
+        print(mat.shape)
+        # device = self.get_device()
+        #
+        # pos_weight = self.w0 * torch.ones(len(pos)).to(device)
+        #
+        #     pos_weight = mat[user * self.item_num + pos].to(device)
+        #     pos_weight = self.weight[0] + self.w2 * pos_weight
+        # else:
+        #
+        #
+        # users = (users * self.item_num).unsqueeze(0)
+        # if self.w4 > 0:
+        #     neg_weight = mat[torch.cat([users] * neg_items.size(1)).transpose(1, 0) + neg_items].flatten().to(device)
+        #     neg_weight = self.w3 + self.w4 * neg_weight
+        # else:
+        #     neg_weight = self.w3 * torch.ones(neg_items.size(0) * neg_items.size(1)).to(device)
+        #
+        # weight = torch.cat((pos_weight, neg_weight))
+        # return weight
+
+
+    # def forward(self, users, pos_items, neg_items):
+    #     print(users.shape)
+    #     print(pos_items.shape)
+    #     print(neg_items.shape)
+    #
+    #     omega_weight = self.get_omegas(users.long(), pos_items.long(), neg_items.long())
+    #     print(omega_weight.shape)
+    #     exit()
+    #     loss = self.cal_loss_L(users, pos_items, neg_items, omega_weight)
+    #     loss += self.gamma * self.norm_loss()
+    #     return loss
+    #
+    # def test_foward(self, users):
+    #     items = torch.arange(self.item_num).to(users.device)
+    #     user_embeds = self.user_embeds(users)
+    #     item_embeds = self.item_embeds(items)
+    #
+    #     return user_embeds.mm(item_embeds.t())
