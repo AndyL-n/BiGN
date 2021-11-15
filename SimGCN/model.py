@@ -53,7 +53,9 @@ class SimGCN(PairWiseModel):
         self.embedding_user = nn.Embedding(num_embeddings=self.n_user, embedding_dim=self.embed_size)
         self.embedding_item = nn.Embedding(num_embeddings=self.n_item, embedding_dim=self.embed_size)
         self.neighbor_num = self.params['neighbor_num']
-
+        self.device = self.params['device']
+        self.weight = self.params['w']
+        self.negative_weight = self.params['negative_weight']
         self.item_sim_neighbor, self.item_sim_weight = self.get_item_mat()
         self.user_sim_neighbor, self.user_sim_weight = self.get_user_mat()
         nn.init.normal_(self.embedding_user.weight, std=0.1)
@@ -91,19 +93,26 @@ class SimGCN(PairWiseModel):
         print(f"successfully sample {self.neighbor_num} user neighbor")
         return neighbor_mat.long(), weight_mat.float()
 
+    def user_tower(self, user_emb):
+        ego_emb = self.embedding_user.weight
+        user_neighbor = self.embedding_user(self.user_sim_neighbor)  # [n_user, neighor_num, emb_dim]
+        user_neighbor_emb = (user_neighbor * self.user_sim_weight.unsqueeze(2)).sum(dim=1)
+        user_emb = ego_emb + user_emb + user_neighbor_emb
+        return user_emb
+
+    def item_tower(self, item_emb):
+        ego_emb = self.embedding_item.weight
+        item_neighbor = self.embedding_item(self.item_sim_neighbor)
+        item_neighbor_emb = (item_neighbor * self.item_sim_weight.unsqueeze(2)).sum(dim=1)
+        item_emb = ego_emb + item_emb + item_neighbor_emb
+        return item_emb
+
     def computer(self):
         users_emb = self.embedding_user.weight
         items_emb = self.embedding_item.weight
-        emb = torch.cat([users_emb, items_emb])
-        user_neighbor = self.embedding_user(self.user_sim_neighbor) # [n_user, neighor_num, emb_dim]
-        user_neighbor_emb = (user_neighbor * self.user_sim_weight.unsqueeze(2)).sum(dim=1)
-        item_neighbor = self.embedding_item(self.item_sim_neighbor)
-        item_neighbor_emb = (item_neighbor * self.item_sim_weight.unsqueeze(2)).sum(dim=1)
-        neighbor_emb = torch.cat([user_neighbor_emb, item_neighbor_emb])
-        all_emb = torch.mm(self.Graph, emb)
-        emb = emb + neighbor_emb + all_emb
-        users, items = t.split(emb, [self.n_user, self.n_item])
-        return users, items
+        all_emb = torch.mm(self.Graph, torch.cat([users_emb, items_emb]))
+        users, items = t.split(all_emb, [self.n_user, self.n_item])
+        return self.user_tower(users), self.item_tower(items)
 
     def norm_loss(self):
         loss = 0.0
@@ -115,11 +124,11 @@ class SimGCN(PairWiseModel):
         user_emb, item_emb = self.computer()
         loss = self.get_loss(user, pos, neg, user_emb, item_emb)
         reg_loss = self.norm_loss()
-        loss = loss + self.decay * reg_loss
-        return loss
+
+        return loss, reg_loss
 
     def get_loss(self, user, pos, neg, user_emb, item_emb):
-        device = self.get_device()
+        device = self.device
         user_embeds = user_emb[user]
         pos_embeds = item_emb[pos]
         neg_embeds = item_emb[neg]
@@ -141,19 +150,27 @@ class SimGCN(PairWiseModel):
         return loss.sum()
 
     def get_weight(self, user, pos, neg):
-        device = self.get_device()
-        if self.w2 > 0:
+        device = self.device
+        if self.weight[1] > 0:
             pos_weight = self.R[user * self.n_item + pos].to(device)
-            pos_weight = self.w1 + self.w2 * pos_weight
+            pos_weight = self.weight[0] + self.weight[1] * pos_weight
         else:
-            pos_weight = self.w1 * torch.ones(len(pos)).to(device)
+            pos_weight = self.weight[0] * torch.ones(len(pos)).to(device)
 
-        user = (user * self.item_num).unsqueeze(0)
-        if self.w4 > 0:
+        user = (user * self.n_item).unsqueeze(0)
+        if self.weight[3] > 0:
             neg_weight = self.R[torch.cat([user] * neg.size(1)).transpose(1, 0) + neg].flatten().to(device)
-            neg_weight = self.w3 + self.w4 * neg_weight
+            neg_weight = self.weight[2] + self.weight[3] * neg_weight
         else:
-            neg_weight = self.w3 * torch.ones(neg.size(0) * neg.size(1)).to(device)
+            neg_weight = self.weight[2] * torch.ones(neg.size(0) * neg.size(1)).to(device)
 
         weight = torch.cat((pos_weight, neg_weight))
         return weight
+
+    def get_users_rating(self, user):
+        user_embs, item_embs = self.computer()
+        user_emb = user_embs[user]
+
+        ratings = self.f(user_emb.mm(item_embs.t()))
+        print(ratings.shape)
+        return ratings
