@@ -491,6 +491,16 @@ class Loader(Dataset):
             print("successfully generated all item similarity matrix...")
         return item_sim
 
+    def getR(self):
+        rowsum = np.array(self.R.sum(axis=1))
+        colsum = np.array(self.R.T.sum(axis=1))
+
+        d_row = (np.sqrt(rowsum + 1) / rowsum).reshape(-1, 1)
+        d_col = (1 / np.sqrt(colsum + 1)).reshape(1, -1)
+
+        R = torch.from_numpy(d_row.dot(d_col)).flatten()
+        return R
+
 # dataset = Loader(path="../Data/gowalla")
 # dataset.getSimilarity()
 # print(dataset.n_user)

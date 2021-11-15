@@ -62,7 +62,7 @@ class SimGCN(PairWiseModel):
 
         self.f = nn.Sigmoid()
         self.Graph = self.dataset.getSparseDGraph()
-        print(self.Graph)
+        self.R = self.dataset.getR()
         print(f"{self.params['name']} is already to go(dropout:{self.params['dropout']})🏃")
 
     def get_item_mat(self):
@@ -140,44 +140,20 @@ class SimGCN(PairWiseModel):
 
         return loss.sum()
 
-    def get_weight(self):
-        mat = self.Graph[self.n_user:][:self.n_item]
-        print(mat.shape)
-        # device = self.get_device()
-        #
-        # pos_weight = self.w0 * torch.ones(len(pos)).to(device)
-        #
-        #     pos_weight = mat[user * self.item_num + pos].to(device)
-        #     pos_weight = self.weight[0] + self.w2 * pos_weight
-        # else:
-        #
-        #
-        # users = (users * self.item_num).unsqueeze(0)
-        # if self.w4 > 0:
-        #     neg_weight = mat[torch.cat([users] * neg_items.size(1)).transpose(1, 0) + neg_items].flatten().to(device)
-        #     neg_weight = self.w3 + self.w4 * neg_weight
-        # else:
-        #     neg_weight = self.w3 * torch.ones(neg_items.size(0) * neg_items.size(1)).to(device)
-        #
-        # weight = torch.cat((pos_weight, neg_weight))
-        # return weight
+    def get_weight(self, user, pos, neg):
+        device = self.get_device()
+        if self.w2 > 0:
+            pos_weight = self.R[user * self.n_item + pos].to(device)
+            pos_weight = self.w1 + self.w2 * pos_weight
+        else:
+            pos_weight = self.w1 * torch.ones(len(pos)).to(device)
 
+        user = (user * self.item_num).unsqueeze(0)
+        if self.w4 > 0:
+            neg_weight = self.R[torch.cat([user] * neg.size(1)).transpose(1, 0) + neg].flatten().to(device)
+            neg_weight = self.w3 + self.w4 * neg_weight
+        else:
+            neg_weight = self.w3 * torch.ones(neg.size(0) * neg.size(1)).to(device)
 
-    # def forward(self, users, pos_items, neg_items):
-    #     print(users.shape)
-    #     print(pos_items.shape)
-    #     print(neg_items.shape)
-    #
-    #     omega_weight = self.get_omegas(users.long(), pos_items.long(), neg_items.long())
-    #     print(omega_weight.shape)
-    #     exit()
-    #     loss = self.cal_loss_L(users, pos_items, neg_items, omega_weight)
-    #     loss += self.gamma * self.norm_loss()
-    #     return loss
-    #
-    # def test_foward(self, users):
-    #     items = torch.arange(self.item_num).to(users.device)
-    #     user_embeds = self.user_embeds(users)
-    #     item_embeds = self.item_embeds(items)
-    #
-    #     return user_embeds.mm(item_embeds.t())
+        weight = torch.cat((pos_weight, neg_weight))
+        return weight
