@@ -6,20 +6,20 @@ import argparse
 import torch as t
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Run BiGN.")
-    parser.add_argument('--model_name', type=str, default='GCN',
-                        help="The name of model. support [BiGN, LightGCN, DGCN_HN, GCN, GCMC, NGCF, NeuMF, TT, BPRMF, GF_CF, LGCN_IDE, DGCF]")
-    parser.add_argument('--train_batch', type=int,default=16,
+    parser = argparse.ArgumentParser(description="Run MGRF.")
+    parser.add_argument('--model_name', type=str, default='MGRF',
+                        help="The name of model. support [MGRF, LightGCN, DGCN_HN, GCN, GCMC, NGCF, NeuMF, TT, BPRMF, GF_CF, LGCN_IDE, DGCF]")
+    parser.add_argument('--train_batch', type=int,default=2048,
                         help="The batch size for bpr loss training procedure.")
     parser.add_argument('--test_batch', type=int, default=2048,
                         help='The batch size of test.')
     parser.add_argument('--embed_size', type=int,default=64,
                         help="Embedding size.")
     parser.add_argument('--layer', type=int,default=3,
-                        help="The layer num of BiGN.")
+                        help="The layer num of MGRF.")
     parser.add_argument('--layer_size', nargs='?', default='[64,64,64]',
                         help='Output sizes of every layer')
-    parser.add_argument('--lr', type=float,default=0.0001,
+    parser.add_argument('--lr', type=float,default=0.001,
                         help="Learning Rate")
     parser.add_argument('--decay', type=float,default=1e-4,
                         help="Regularizations.")
@@ -45,9 +45,9 @@ def parse_args():
                         help='Number of iterations to perform the routing mechanism.')
     parser.add_argument('--pick_scale', type=float, default=1e10,
                         help='Scale')
-    parser.add_argument('--neighbor', type=int, default=10,
-                        help="The number of neighbor.")
-    parser.add_argument('--epochs', type=int, default=1000,
+    parser.add_argument('--neighbor', type=int, default=20,
+                        help="The number of sample_neighbor.")
+    parser.add_argument('--epochs', type=int, default=2000,
                         help="The number of epochs.")
     parser.add_argument('--normalization', type=str, default='connect_symmetric',
                         help='The approach of normalization, support [symmetric, connect_symmetric, L, R, sotfmax, min_max, min_max&sotfmax]')

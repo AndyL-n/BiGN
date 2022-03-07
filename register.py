@@ -1,12 +1,21 @@
 import model
-from dataloader import Loader
-import configparser
+from pprint import pprint
 import sys
-import torch as t
-from sys import exit
+from dataloader import Loader
+from parse import args
 
+all_dataset = ['amazon-book', 'gowalla', 'ml-1m', 'ml-10m','ml-20m', 'ml-25m', 'ml-100k', 'pinterest', 'yelp2018']
+if args.dataset in all_dataset:
+    dataset = Loader(path="Data/"+args.dataset)
+else:
+    sys.exit("No such file or directory:" + args.dataset)
+print('===========config================')
+pprint(args)
+print("using bpr loss")
+print('===========end===================')
+#
 MODELS = {
-    'BiGN': model.BiGN,
+    'MGRF': model.MGRF,
     # 'LightGCN: Simplifying and Powering Graph Convolution Network for Recommendation', SIGIR2020
     'LightGCN': model.LightGCN,
     # 'Deep Graph Convolutional Networks with Hybrid Normalization for Accurate and Diverse Recommendation', DLP-KDD2021
@@ -47,32 +56,3 @@ MODELS = {
     'GF_CF': model.GF_CF,
     'LGCN_IDE': model.LGCN_IDE,
 }
-
-def data_param_prepare(model, dataset):
-    config = configparser.ConfigParser()
-    config.read('params/' + model + '_' + dataset + '_config.ini')
-    print('params/' + model + '_' + dataset + '_config.ini')
-    all_dataset = ['amazon-book', 'gowalla', 'ml-1m', 'ml-10m', 'ml-20m', 'ml-25m', 'ml-100k', 'pinterest', 'yelp2018']
-    params = {}
-    params['name'] = config['Model']['name']
-    params['dataset'] = dataset
-    GPU = t.cuda.is_available()
-    device = t.device('cuda' if GPU else "cpu")
-    params['device'] = device
-    # if model == 'GC_CF':
-
-
-    params['embed_size'] = config.getint('Model', 'embedding_dim')
-    # params['layer'] = config.getint('Model', 'layers')
-    params['test_batch_size'] = config.getint('Testing', 'test_batch_size')
-    params['topk'] = config.getint('Testing', 'topk')
-    # params['lr'] = config.getfloat('Training', 'lea2rning_rate')
-    # params['seed'] = config.getint('Model', 'seed')
-    # params['dropout'] = config.getint('Model', 'dropout')
-
-
-    if params['dataset'] in all_dataset:
-        dataset = Loader(path="Data/" + params['dataset'])
-    else:
-        sys.exit("No such file or directory:" + params['dataset'])
-    return params, dataset

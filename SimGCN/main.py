@@ -125,9 +125,19 @@ def test_one_user(X, k):
     sorted_items = X[0].numpy()
     groundTrue = X[1]
     # # 0/1 序列
-    # r = getLabel(groundTrue, sorted_items)
-    # ret = RecallPrecision_ATk(groundTrue, r, k)
-    # return ret['precision'], ret['recall'], NDCGatK_r(groundTrue,r,k)
+    r = getLabel(groundTrue, sorted_items)
+    ret = RecallPrecision_ATk(groundTrue, r, k)
+    return ret['precision'], ret['recall'], NDCGatK_r(groundTrue,r,k)
+
+def getLabel(test_data, pred_data):
+    r = []
+    for i in range(len(test_data)):
+        groundTrue = test_data[i]
+        predictTopK = pred_data[i]
+        pred = list(map(lambda x: x in groundTrue, predictTopK))
+        pred = np.array(pred).astype("float")
+        r.append(pred)
+    return np.array(r).astype('float')
 
 def test(model, dataset, params):
     topk = params['topk']
@@ -190,7 +200,7 @@ def test(model, dataset, params):
         NDCG /= n_user
         F1_score = 2 * (Precision * Recall) / (Precision + Recall)
 
-        return F1_score, Precision, Recall, NDCG
+        return ('%.5' % F1_score), ('%.5' % Precision), ('%.5' % Recall), ('%.5' % NDCG)
 
 if __name__ == "__main__":
 

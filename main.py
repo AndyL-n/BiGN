@@ -2,25 +2,23 @@
 author: L
 date: 2021/9/6 17:07
 """
-from register import MODELS, data_param_prepare
+from register import dataset, args, MODELS
 from utils import set_seed, minibatch, RecallPrecision_ATk, getLabel, NDCGatK_r, sample, shuffle
 import numpy as np
+import torch as t
 import pandas as pd
 from time import time, strftime, localtime
 import torch.optim as optim
-import torch as t
-import torch
+import sys
 import os
-import argparse
-
-def test_one_user(X, topks):
+def test_one_user(X):
     sorted_items = X[0].numpy()
     groundTrue = X[1]
     # 0/1 序列
     r = getLabel(groundTrue, sorted_items)
 
     pre, recall, ndcg = [], [], []
-    for k in topks:
+    for k in eval(args.topks):
         ret = RecallPrecision_ATk(groundTrue, r, k)
         pre.append(ret['precision'])
         recall.append(ret['recall'])
@@ -29,18 +27,16 @@ def test_one_user(X, topks):
             'precision': np.array(pre),
             'ndcg': np.array(ndcg)}
 
-def Test(dataset, model, params):
-    batch_size = params['test_batch_size']
+def Test(dataset, model):
+    batch_size = args.test_batch
     testDict: dict = dataset.test_dict
     model: model.LightGCN
     # eval mode with no dropout
-    if params['name'] == 'GF_CF' or params['name'] == 'LGCN_IDE':
+    if args.model_name == 'GF_CF' or args.model_name == 'LGCN_IDE':
         model.train()
     else:
         model = model.eval()
-
-    topks = [params['topk']]
-    # topks = eval(topks)
+    topks = eval(args.topks)
     max_K = max(topks)
     results = {'precision': np.zeros(len(topks)),
                'recall': np.zeros(len(topks)),
@@ -64,7 +60,7 @@ def Test(dataset, model, params):
             groundTrue = [testDict[u] for u in batch_users]
             # batch内的user [batch * 1]
             batch_users_gpu = t.Tensor(batch_users).long()
-            batch_users_gpu = batch_users_gpu.to(params['device'])
+            batch_users_gpu = batch_users_gpu.to(args.device)
             # batch所有的评分[batch * n_items]
             rating = model.get_users_rating(batch_users_gpu)
             # print(rating.shape)
@@ -96,7 +92,7 @@ def Test(dataset, model, params):
         X = zip(rating_list, groundTrue_list)
         pre_results = []
         for x in X:
-            pre_results.append(test_one_user(x, topks))
+            pre_results.append(test_one_user(x))
         scale = float(batch_size/len(users))
         for result in pre_results:
             results['recall'] += result['recall']
@@ -108,41 +104,35 @@ def Test(dataset, model, params):
         # results['auc'] = np.mean(auc_record)
         return results
 
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--model', default='GF_CF', type=str)
-    parser.add_argument('--dataset', default='ml-1m', type=str)
-    args = parser.parse_args()
-    params, dataset = data_param_prepare(args.model, args.dataset)
-    model = params['name']
-    print('================Run\t' + model + '\t🏃================')
-
-    if model == 'GF_CF' or model == 'LGCN_IDE':
-        model = MODELS[model](params, dataset)
-        result = Test(dataset, model, params)
+if __name__ == '__main__':
+    if args.model_name == 'GF_CF' or args.model_name == 'LGCN_IDE':
+        model = MODELS[args.model_name](args, dataset)
+        result = Test(dataset, model)
         precision, recall, ndcg = [result[x] for x in result]
         print(precision, recall, ndcg)
+        print(args.model_name)
     else:
-        print(">>SEED:", params['seed'])
-        set_seed(params['seed'])
+        print(">>SEED:", args.seed)
+        set_seed(args.seed)
+        print(args.model_name)
 
-        model = MODELS[model](params, dataset)
-        model = model.to(params['device'])
-        optimizer = optim.Adam(model.parameters(), lr=params['lr'])
-
-
+        model = MODELS[args.model_name](args, dataset)
+        model = model.to(args.device)
+        # user, item = model.computer()
+        # model.create_cor_loss(user, item)
+        # model.bpr_loss(t.tensor([1,2]),t.tensor([1,1]),t.tensor([2,2]))
+        # rating = model.get_users_rating(t.tensor([1, 2]))
+        # print(rating.shape)
+        optimizer = optim.Adam(model.parameters(), lr=args.lr)
+        model.computer()
         results = []
         # model.load_state_dict(t.load('weight/.tar'))
-        result = Test(dataset, model, params)
-
+        result = Test(dataset, model)
         precision, recall, ndcg = [result[x] for x in result]
         print(recall, ndcg, precision)
-        exit()
         results.append([0, 0, 0, 0, recall, ndcg, precision])
         timestamp = strftime('%Y-%m-%d', localtime(time()))
-        path = '{}_{}_layer{}_dim{}_batch{}_K{}_lr{}_neighbor{}_{}' \
+        path = '{}5_{}_layer{}_dim{}_batch{}_K{}_lr{}_neighbor{}_{}' \
             .format(args.model_name, args.dataset, args.layer, args.embed_size, args.train_batch, args.topks, args.lr, args.neighbor, timestamp)
         print(path)
         print('start training...')
@@ -154,6 +144,7 @@ if __name__ == "__main__":
         for epoch in range(args.epochs):
             t1 = time()
             S = sample(dataset)
+            # print(S.shape)
             users = t.Tensor(S[:, 0]).long()
             posItems = t.Tensor(S[:, 1]).long()
             negItems = t.Tensor(S[:, 2:]).long()
@@ -187,5 +178,6 @@ if __name__ == "__main__":
             results.append([epoch + 1, t2-t1, aver_loss, time()-t2, recall, ndcg, precision])
             pd.DataFrame(results, columns=['Iteration', 'fit_time', 'loss', 'evaluate_time', 'recall', 'ndcg', 'precision']).to_csv('log/'+ path +'.csv')
             model.save_model('weight/' + path + '_epoch{}.tar'.format(epoch + 1))
+            # print(epoch)
             if epoch > 0:
                 os.remove('weight/' + path + '_epoch{}.tar'.format(epoch))
