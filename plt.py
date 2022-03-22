@@ -3,10 +3,10 @@
 # date: 2021/10/25 9:25
 # """
 #
-a = [1,2,3]
-b = [4,5,6]
-a *= 2
-print(a)
+# a = [1,2,3]
+# b = [4,5,6]
+# a *= 2
+# print(a)
 # import matplotlib.pyplot as plt
 # import csv
 # import pandas as pd
@@ -79,3 +79,62 @@ print(a)
 # # plt.ylabel('Recall@20')
 # # plt.legend(loc='lower right', fontsize='15')
 # # plt.show()
+
+import numpy as np
+from sklearn.metrics import pairwise_distances
+# A = np.empty([3,3], dtype = int)
+# print(A)
+# K = 1 # Select top K values along each column
+#
+# # Sort A, store the argsort for later usage
+# sidx = np.argsort(A,axis=0)
+# sA = A[sidx,np.arange(A.shape[1])]
+#
+# # Perform differentiation along rows and look for non-zero differentiations
+# df = np.diff(sA,axis=0)!=0
+#
+# # Perform cumulative summation along rows from bottom upwards.
+# # Thus, summations < K should give us a mask of valid ones that are to
+# # be kept per column. Use this mask to set rest as zeros in sorted array.
+# mask = (df[::-1].cumsum(0)<K)[::-1]
+# sA[:-1] *=mask
+#
+# # Finally revert back to unsorted order by using sorted indices sidx
+# out = sA[sidx.argsort(0),np.arange(sA.shape[1])]
+# print(out)
+# print(out.T)
+# R = np.random.rand(2,2)
+# R = [[10,2,3],[7,8,9],[1,5,4]]
+# k = 2
+# # dist_out = 1 - pairwise_distances(R, metric="cosine")
+# dist_out = np.array(R)
+# print(dist_out)
+# print("-------------------")
+# k = 2
+# sidx = np.argsort(dist_out, axis=1)[:,-2]
+# row = np.array([i for i in range(k)])
+# print(row)
+# print(sidx)
+# print(dist_out[1,1])
+# print("-------------------")
+# sA = dist_out[sidx, np.arange(dist_out.shape[1])]
+# print(sA)
+# print("-------------------")
+# df = np.diff(sA, axis=0) != 0
+# print(sA)
+# print("-------------------")
+# mask = (df[::-1].cumsum(0) < k)[::-1]
+# print(mask)
+# print("-------------------")
+# sA[:-1] *= mask
+# print(sA)
+# print("-------------------")
+# dist_out = sA[sidx.argsort(0), np.arange(sA.shape[1])]
+# print(dist_out)
+# print("-------------------")
+# print(dist_out)
+# # dist_out = dist_out.T
+# # print(dist_out)
+
+R = np.array([1,3,4,5])
+print(R[0,2])

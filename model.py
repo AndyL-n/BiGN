@@ -679,6 +679,51 @@ class DGCF(BasicModel):
         scores = t.sum(scores, dim=1)
         return scores
 
+class GHGF(BasicModel):
+    def __init__(self, args, dataset):
+        super(NGCF, self).__init__()
+        self.args = args
+        self.dataset = dataset
+        self.__init_weight()
+
+    def __int_weight(self):
+        self.n_user = self.dataset.n_user
+        self.n_item = self.dataset.n_item
+        self.embed_size = self.args.embed_size
+        self.layer = self.args.layer
+        self.layer_size = eval(self.args.layer_size)
+        self.mess_dropout = eval(self.args.mess_dropout)
+        self.split = self.args.split
+        self.embedding_user = t.nn.Embedding(num_embeddings=self.n_user, embedding_dim=self.embed_size)
+        self.embedding_item = t.nn.Embedding(num_embeddings=self.n_item, embedding_dim=self.embed_size)
+
+        # xavier init
+        if self.args.pretrain:
+            self.embedding_user.weight.data.copy_(t.from_numpy(self.config['user_emb']))
+            self.embedding_item.weight.data.copy_(t.from_numpy(self.config['item_emb']))
+            print('use pretarined data')
+        else:
+            nn.init.xavier_uniform_(self.embedding_user.weight, gain=1)
+            nn.init.xavier_uniform_(self.embedding_item.weight, gain=1)
+            cprint('use xavier initilizer')
+
+        # weight
+        initializer = nn.init.xavier_uniform_
+        weight_dict = nn.ParameterDict()
+        layers = [self.embed_size] + self.layer_size
+        for k in range(self.layer):
+            weight_dict.update({'W_gc_%d' % k: nn.Parameter(initializer(t.empty(layers[k], layers[k + 1])))})
+            weight_dict.update({'b_gc_%d' % k: nn.Parameter(initializer(t.empty(1, layers[k + 1])))})
+
+            weight_dict.update({'W_bi_%d' % k: nn.Parameter(initializer(t.empty(layers[k], layers[k + 1])))})
+            weight_dict.update({'b_bi_%d' % k: nn.Parameter(initializer(t.empty(1, layers[k + 1])))})
+
+        self.weight_dict = weight_dict
+
+        self.f = nn.Sigmoid()
+        self.Graph = self.dataset.getSparseGraph()
+        print(f"{self.args.model_name} is already to go(dropout:{self.args.dropout})")
+
 class MGRF(BasicModel):
     def __init__(self, args, dataset):
         super(MGRF, self).__init__()
@@ -756,7 +801,9 @@ class MGRF(BasicModel):
             else:
                 g_droped = self.Graph
         else:
+            # graph
             g_droped = self.Graph
+            # similarity_top_k
             similarity = self.similarity
 
 
